@@ -232,9 +232,20 @@ export default function App() {
 }
 
 function getActionHint(snapshot: SceneControllerSnapshot): string {
-  if (snapshot.isMoving) return 'Drag with the mouse or move your closed fist.';
-  if (snapshot.selectedName) return 'Click and drag, or close your fist to move it.';
-  return 'Click the box, or point at it with your index finger to select it.';
+  switch (snapshot.action) {
+    case 'rotate':
+      return 'Tilt your palm, or hold R and drag to rotate it.';
+    case 'scale':
+      return 'Change thumb–index distance, or hold S and drag to resize it.';
+    case 'shape':
+      return 'Stretch along your palm, or hold Shift+S and drag to shape it.';
+    case 'move':
+      return 'Drag with the mouse or move your closed fist.';
+    default:
+      return snapshot.selectedName
+        ? 'Click and drag, or close your fist to move it.'
+        : 'Click the box, or point at it with your index finger to select it.';
+  }
 }
 
 function engineStatusLabel(g: string, cam: WebcamStatus): string {

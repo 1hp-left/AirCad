@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { normalizedHandSize, palmCenter } from '../../gesture/landmarkUtils';
 import type { HandResult } from '../../gesture/types';
 import { rayFromNormalizedPoint } from '../selection';
+import type { TransformAction } from './TransformAction';
 
 const MIN_DEPTH = 2.5;
 const MAX_DEPTH = 24;
 const MIN_HAND_SIZE = 0.015;
 
 /** Stateful closed-fist grab that moves one selected object at a time. */
-export class MoveAction {
+export class MoveAction implements TransformAction {
   private grabbedObject: THREE.Object3D | null = null;
   private readonly worldOffset = new THREE.Vector3();
   private grabDistance = 0;

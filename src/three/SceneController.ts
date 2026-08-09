@@ -3,6 +3,10 @@ import { GestureEngine } from '../gesture/GestureEngine';
 import { fingertipScreen } from '../gesture/landmarkUtils';
 import type { GestureFrame, HandResult } from '../gesture/types';
 import { MoveAction } from './actions/MoveAction';
+import { RotateAction } from './actions/RotateAction';
+import { ScaleAction } from './actions/ScaleAction';
+import { ShapeAction } from './actions/ShapeAction';
+import type { TransformAction } from './actions/TransformAction';
 import { ObjectStore } from './ObjectStore';
 import {
   raycastSelectableAtNormalizedPoint,
@@ -33,7 +37,14 @@ export class SceneController {
   private previousAction: ActionId = 'none';
   private selectionMisses = 0;
   private lastSnapshotKey = '';
-  private readonly moveAction = new MoveAction();
+  private activeAction: TransformAction | null = null;
+  private activeActionId: ActionId = 'none';
+  private readonly actions: Partial<Record<ActionId, TransformAction>> = {
+    move: new MoveAction(),
+    rotate: new RotateAction(),
+    scale: new ScaleAction(),
+    shape: new ShapeAction(),
+  };
   private readonly unsubscribe: () => void;
   private readonly manager: SceneManager;
   private readonly store: ObjectStore;
@@ -58,16 +69,16 @@ export class SceneController {
   snapshot(): SceneControllerSnapshot {
     const selected = this.store.selected;
     return {
-      action: this.moveAction.isActive ? 'move' : this.previousAction,
+      action: this.activeAction ? this.activeActionId : this.previousAction,
       selectedName: selected?.name ?? null,
-      isMoving: this.moveAction.isActive,
+      isMoving: this.activeAction !== null,
     };
   }
 
   dispose(): void {
     this.unsubscribe();
     this.latestFrame = null;
-    this.moveAction.reset();
+    this.resetActiveAction();
     this.manager.gestureCursor.hide();
     this.listeners.clear();
     if (this.manager.onBeforeRender === this.handleFrame) {
@@ -78,7 +89,7 @@ export class SceneController {
   private readonly handleFrame = (): void => {
     const frame = this.latestFrame;
     if (this.manager.mouseInteractionActive) {
-      this.moveAction.reset();
+      this.resetActiveAction();
       this.manager.gestureCursor.hide();
       this.previousAction = 'none';
       this.emitSnapshot();
@@ -86,7 +97,7 @@ export class SceneController {
     }
 
     if (!frame || frame.hands.length === 0) {
-      this.moveAction.reset();
+      this.resetActiveAction();
       this.manager.gestureCursor.hide();
       this.previousAction = 'none';
       this.emitSnapshot();
@@ -95,6 +106,7 @@ export class SceneController {
 
     const pointingHand = frame.hands.find((hand) => actionFor(hand) === 'select');
     if (pointingHand) {
+      this.resetActiveAction();
       const fingertip = fingertipScreen(pointingHand);
       const ray = selectionRayAtNormalizedPoint(fingertip, this.manager.camera);
       const hit = raycastSelectableAtNormalizedPoint(
@@ -118,7 +130,6 @@ export class SceneController {
         this.store.clearSelection();
         this.selectionMisses = 0;
       }
-      this.moveAction.reset();
       this.previousAction = 'select';
       this.emitSnapshot();
       return;
@@ -129,19 +140,31 @@ export class SceneController {
 
     const primaryHand = frame.hands[0];
     const action = actionFor(primaryHand);
-    if (action === 'move' && this.store.selected) {
-      if (this.previousAction !== 'move' || this.moveAction.object !== this.store.selected) {
-        this.moveAction.start(this.store.selected, primaryHand, this.manager.camera);
+    const nextAction = this.actions[action];
+    const selected = this.store.selected;
+
+    if (nextAction && selected) {
+      if (this.activeAction !== nextAction || nextAction.object !== selected) {
+        this.resetActiveAction();
+        nextAction.start(selected, primaryHand, this.manager.camera);
+        this.activeAction = nextAction;
+        this.activeActionId = action;
       }
-      this.moveAction.update(primaryHand, this.manager.camera);
+      nextAction.update(primaryHand, this.manager.camera);
       this.store.updateSelectionOutline();
     } else {
-      this.moveAction.reset();
+      this.resetActiveAction();
     }
 
     this.previousAction = action;
     this.emitSnapshot();
   };
+
+  private resetActiveAction(): void {
+    this.activeAction?.reset();
+    this.activeAction = null;
+    this.activeActionId = 'none';
+  }
 
   private emitSnapshot(): void {
     const snapshot = this.snapshot();
