@@ -24,13 +24,15 @@ type TransformActionId = 'rotate' | 'scale' | 'shape';
 export class MouseController {
   private readonly manager: SceneManager;
   private readonly moveAction = new MoveAction();
+  private readonly shapeAction = new ShapeAction();
   private readonly transformActions: Record<TransformActionId, MouseTransformAction> = {
     rotate: new RotateAction(),
     scale: new ScaleAction(),
-    shape: new ShapeAction(),
+    shape: this.shapeAction,
   };
   private readonly listeners = new Set<SceneControllerListener>();
   private readonly heldKeys = new Set<string>();
+  private readonly raycaster = new THREE.Raycaster();
   private readonly canvas: HTMLCanvasElement;
   private pointerId: number | null = null;
   private pointerDown = new THREE.Vector2();
@@ -62,17 +64,19 @@ export class MouseController {
 
   snapshot(): SceneControllerSnapshot {
     const selected = this.manager.objectStore.selected;
-    const transformActive = this.activeTransform !== null;
+    const activeTransform = this.activeTransform;
     return {
-      action: transformActive
-        ? this.activeTransform!
+      action: activeTransform
+        ? activeTransform
         : this.moveAction.isActive
           ? 'move'
           : this.pointerId !== null
             ? 'select'
             : 'none',
       selectedName: selected?.name ?? null,
-      isMoving: this.moveAction.isActive || transformActive,
+      isMoving: this.moveAction.isActive || activeTransform !== null,
+      shapeAxis: activeTransform === 'shape' ? this.shapeAction.axisLabel : null,
+      input: this.moveAction.isActive || activeTransform ? 'mouse' : null,
     };
   }
 
@@ -218,26 +222,26 @@ export class MouseController {
       clientToNdc(event.clientX, event.clientY, rect),
       this.manager.camera,
       this.manager.objectStore.group,
+      this.raycaster,
     );
   }
 
   private rayAt(clientX: number, clientY: number): THREE.Ray {
     const rect = this.canvas.getBoundingClientRect();
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(
+    this.raycaster.setFromCamera(
       clientToNdc(clientX, clientY, rect),
       this.manager.camera,
     );
-    return raycaster.ray.clone();
+    return this.raycaster.ray;
   }
 
   private emitSnapshot(action: SceneControllerSnapshot['action']): void {
     const snapshot = this.snapshot();
     const next = {
       ...snapshot,
-      action: snapshot.isMoving ? (this.activeTransform ?? (this.moveAction.isActive ? 'move' : action)) : action,
+      action: snapshot.isMoving ? (this.activeTransform ?? 'move') : action,
     } satisfies SceneControllerSnapshot;
-    const key = `${next.action}:${next.selectedName ?? ''}:${next.isMoving}`;
+    const key = `${next.action}:${next.selectedName ?? ''}:${next.isMoving}:${next.shapeAxis ?? ''}:${next.input ?? ''}`;
     if (key === this.lastSnapshotKey) return;
     this.lastSnapshotKey = key;
     this.listeners.forEach((listener) => listener(next));

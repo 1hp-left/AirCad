@@ -18,13 +18,12 @@ export class SceneManager {
   readonly renderer: THREE.WebGLRenderer;
   readonly controls: OrbitControls;
 
-  private readonly clock = new THREE.Clock();
   private readonly resizeObserver: ResizeObserver | null;
   private rafId = 0;
   private disposed = false;
 
   /** Per-frame hook set by the controller — runs before each render(). */
-  onBeforeRender: ((delta: number, elapsed: number) => void) | null = null;
+  onBeforeRender: (() => void) | null = null;
 
   /** A group holding all user-created objects, separate from grid/lights. */
   readonly objects: THREE.Group;
@@ -86,12 +85,12 @@ export class SceneManager {
     this.setupLights();
     this.setupEnvironment();
 
-    window.addEventListener('resize', this.handleResize);
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resizeToCanvas());
       this.resizeObserver.observe(canvas);
     } else {
       this.resizeObserver = null;
+      window.addEventListener('resize', this.handleResize);
     }
     this.resizeToCanvas();
   }
@@ -172,14 +171,11 @@ export class SceneManager {
 
   start(): void {
     if (this.rafId) return;
-    this.clock.start();
     const loop = () => {
       if (this.disposed) return;
       this.rafId = requestAnimationFrame(loop);
-      const delta = this.clock.getDelta();
-      const elapsed = this.clock.elapsedTime;
       this.controls.update();
-      this.onBeforeRender?.(delta, elapsed);
+      this.onBeforeRender?.();
       this.renderer.render(this.scene, this.camera);
     };
     this.rafId = requestAnimationFrame(loop);
@@ -195,7 +191,7 @@ export class SceneManager {
     this.objectStore.dispose();
     this.gestureCursor.dispose();
     this.onBeforeRender = null;
-    window.removeEventListener('resize', this.handleResize);
+    if (!this.resizeObserver) window.removeEventListener('resize', this.handleResize);
     this.resizeObserver?.disconnect();
     this.controls.dispose();
     // Traverse and dispose geometries/materials.

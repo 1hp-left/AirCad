@@ -8,6 +8,14 @@ import { MouseController } from './three/MouseController';
 import { SceneController, type SceneControllerSnapshot } from './three/SceneController';
 import { SceneManager } from './three/SceneManager';
 
+const EMPTY_SCENE_SNAPSHOT: SceneControllerSnapshot = {
+  action: 'none',
+  selectedName: null,
+  isMoving: false,
+  shapeAxis: null,
+  input: null,
+};
+
 /**
  * AirCad — gesture-controlled 3D modeling.
  *
@@ -19,17 +27,8 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const managerRef = useRef<SceneManager | null>(null);
   const controllerRef = useRef<SceneController | null>(null);
-  const mouseControllerRef = useRef<MouseController | null>(null);
-  const gestureSnapshotRef = useRef<SceneControllerSnapshot>({
-    action: 'none',
-    selectedName: null,
-    isMoving: false,
-  });
-  const mouseSnapshotRef = useRef<SceneControllerSnapshot>({
-    action: 'none',
-    selectedName: null,
-    isMoving: false,
-  });
+  const gestureSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
+  const mouseSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
   const [cameraPreviewVisible, setCameraPreviewVisible] = useState(true);
   const [activeTool, setActiveTool] = useState<'box' | 'select' | 'move'>('select');
   const [sceneSnapshot, setSceneSnapshot] = useState<SceneControllerSnapshot>(
@@ -46,7 +45,6 @@ export default function App() {
     const manager = new SceneManager(canvasRef.current);
     const mouseController = new MouseController(manager);
     managerRef.current = manager;
-    mouseControllerRef.current = mouseController;
     manager.addTestBox();
     manager.start();
 
@@ -60,7 +58,6 @@ export default function App() {
       controllerRef.current?.dispose();
       controllerRef.current = null;
       mouseController.dispose();
-      mouseControllerRef.current = null;
       manager.dispose();
       managerRef.current = null;
     };
@@ -89,14 +86,11 @@ export default function App() {
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [gestureStatus, engineRef]);
+  }, [gestureStatus]);
 
   const actionHint = getActionHint(sceneSnapshot);
-  const sceneStatus = sceneSnapshot.isMoving
-    ? 'Moving selected object'
-    : sceneSnapshot.selectedName
-      ? 'Object selected'
-      : 'No object selected';
+  const sceneStatus = getSceneStatus(sceneSnapshot);
+  const gestureControlActive = sceneSnapshot.isMoving && sceneSnapshot.input === 'gesture';
   const cameraAvailable = camStatus === 'ready' || camStatus === 'requesting';
   const blocked = camStatus === 'denied' || camStatus === 'no-device' || camStatus === 'error';
 
@@ -179,10 +173,18 @@ export default function App() {
           <div className="section-heading">Gesture input</div>
           <div className="gesture-value">
             <span className="gesture-kicker">
-              {numHands > 0 ? `${numHands} hand${numHands > 1 ? 's' : ''}` : 'Waiting'}
+              {gestureControlActive
+                ? 'Landmark control locked'
+                : numHands > 0
+                  ? `${numHands} hand${numHands > 1 ? 's' : ''}`
+                  : 'Waiting'}
             </span>
-            <strong className={currentGesture === 'None' ? 'idle' : ''}>
-              {currentGesture === 'None' ? 'No gesture' : labelFor(currentGesture)}
+            <strong className={!gestureControlActive && currentGesture === 'None' ? 'idle' : ''}>
+              {gestureControlActive
+                ? controlTitle(sceneSnapshot)
+                : currentGesture === 'None'
+                  ? 'No gesture'
+                  : labelFor(currentGesture)}
             </strong>
           </div>
           <div className="property-row">
@@ -204,6 +206,10 @@ export default function App() {
         </section>
       </aside>
 
+      {sceneSnapshot.isMoving && sceneSnapshot.input === 'gesture' && (
+        <ControlCoach snapshot={sceneSnapshot} />
+      )}
+
       <section className="bottom-panel" aria-label="Gesture reference">
         <div className="bottom-heading">Gesture reference</div>
         <GestureLegend />
@@ -221,7 +227,7 @@ export default function App() {
           </div>
           <div className="webcam-frame">
             <video ref={videoRef} playsInline muted />
-            <WebcamOverlay engineRef={engineRef} />
+            <WebcamOverlay engine={engineRef.current} />
           </div>
         </section>
       )}
@@ -232,19 +238,94 @@ export default function App() {
 }
 
 function getActionHint(snapshot: SceneControllerSnapshot): string {
+  const gestureActive = snapshot.isMoving && snapshot.input === 'gesture';
+  const mouseActive = snapshot.isMoving && snapshot.input === 'mouse';
   switch (snapshot.action) {
     case 'rotate':
-      return 'Tilt your palm, or hold R and drag to rotate it.';
+      if (mouseActive) return 'Drag sideways to spin or vertically to tilt.';
+      return gestureActive
+        ? 'Rotation stays locked even if the Victory gesture stops recognizing.'
+        : 'Show a Victory sign to start, or hold R and drag.';
     case 'scale':
-      return 'Change thumb–index distance, or hold S and drag to resize it.';
+      if (mouseActive) return 'Drag up to grow or down to shrink.';
+      return gestureActive
+        ? 'Spread thumb and index to grow; pinch them together to shrink.'
+        : 'Show a thumb up to start, or hold S and drag.';
     case 'shape':
-      return 'Stretch along your palm, or hold Shift+S and drag to shape it.';
+      if (mouseActive) return 'Drag up to stretch height or down to squash it.';
+      return gestureActive
+        ? `${snapshot.shapeAxis === 'X' ? 'Width' : 'Height'} is locked. Move up to stretch or down to squash.`
+        : 'Hold the I-love-you gesture upright for height or sideways for width.';
     case 'move':
-      return 'Drag with the mouse or move your closed fist.';
+      if (mouseActive) return 'Drag to place the object on the current view plane.';
+      return gestureActive
+        ? 'Move your hand to place the object. Move closer or farther to change depth.'
+        : 'Close your fist to grab, or drag the object with the mouse.';
     default:
       return snapshot.selectedName
         ? 'Click and drag, or close your fist to move it.'
         : 'Click the box, or point at it with your index finger to select it.';
+  }
+}
+
+function getSceneStatus(snapshot: SceneControllerSnapshot): string {
+  if (!snapshot.selectedName) return 'No object selected';
+  if (!snapshot.isMoving) return 'Object selected';
+  switch (snapshot.action) {
+    case 'rotate':
+      return 'Rotating selected object';
+    case 'scale':
+      return 'Resizing selected object';
+    case 'shape':
+      return 'Shaping selected object';
+    default:
+      return 'Moving selected object';
+  }
+}
+
+function ControlCoach({ snapshot }: { snapshot: SceneControllerSnapshot }) {
+  const axisName = snapshot.shapeAxis === 'X' ? 'width' : 'height';
+  return (
+    <section className="control-coach" role="status" aria-live="polite">
+      <div className="coach-heading">
+        <span className="status-dot live" aria-hidden="true" />
+        <strong>{controlTitle(snapshot)}</strong>
+      </div>
+      <div className="coach-directions">
+        {snapshot.action === 'rotate' && (
+          <>
+            <span><b aria-hidden="true">← →</b> Move sideways to spin</span>
+            <span><b aria-hidden="true">↑ ↓</b> Move vertically to tilt</span>
+          </>
+        )}
+        {snapshot.action === 'shape' && (
+          <>
+            <span><b aria-hidden="true">↑</b> Stretch {axisName}</span>
+            <span><b aria-hidden="true">↓</b> Squash {axisName}</span>
+          </>
+        )}
+        {snapshot.action === 'scale' && (
+          <span><b aria-hidden="true">↔</b> Spread to grow · pinch to shrink</span>
+        )}
+        {snapshot.action === 'move' && (
+          <span><b aria-hidden="true">✥</b> Move your hand to place the object</span>
+        )}
+      </div>
+      <span className="coach-release">Open your palm or lower your hand to finish</span>
+    </section>
+  );
+}
+
+function controlTitle(snapshot: SceneControllerSnapshot): string {
+  switch (snapshot.action) {
+    case 'rotate':
+      return 'Rotation locked';
+    case 'scale':
+      return 'Resize locked';
+    case 'shape':
+      return `${snapshot.shapeAxis === 'X' ? 'Width' : 'Height'} shaping locked`;
+    default:
+      return 'Object grabbed';
   }
 }
 

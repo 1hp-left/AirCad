@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { GESTURE_CONFIG, type ActionId } from '../config/gestures';
 import { GestureEngine } from '../gesture/GestureEngine';
 import { fingertipScreen } from '../gesture/landmarkUtils';
@@ -5,26 +6,30 @@ import type { GestureFrame, HandResult } from '../gesture/types';
 import { MoveAction } from './actions/MoveAction';
 import { RotateAction } from './actions/RotateAction';
 import { ScaleAction } from './actions/ScaleAction';
-import { ShapeAction } from './actions/ShapeAction';
+import { ShapeAction, type ShapeAxis } from './actions/ShapeAction';
 import type { TransformAction } from './actions/TransformAction';
 import { ObjectStore } from './ObjectStore';
-import {
-  raycastSelectableAtNormalizedPoint,
-  rayEndpoint,
-  selectionRayAtNormalizedPoint,
-} from './selection';
+import { raycastSelectableAtNormalizedPoint } from './selection';
 import { SceneManager } from './SceneManager';
 
 export interface SceneControllerSnapshot {
   action: ActionId;
   selectedName: string | null;
   isMoving: boolean;
+  shapeAxis: ShapeAxis | null;
+  input: 'gesture' | 'mouse' | null;
 }
 
 export type SceneControllerListener = (snapshot: SceneControllerSnapshot) => void;
 
 const MIN_GESTURE_SCORE = 0.45;
+const MIN_RELEASE_SCORE = 0.6;
 const MAX_SELECTION_MISSES = 8;
+const ACTION_START_MS = 70;
+const ACTION_RELEASE_MS = 180;
+const HAND_LOST_GRACE_MS = 300;
+
+type TransformActionId = 'move' | 'rotate' | 'scale' | 'shape';
 
 /**
  * Bridges gesture frames into the Three.js scene loop.
@@ -38,17 +43,27 @@ export class SceneController {
   private selectionMisses = 0;
   private lastSnapshotKey = '';
   private activeAction: TransformAction | null = null;
-  private activeActionId: ActionId = 'none';
-  private readonly actions: Partial<Record<ActionId, TransformAction>> = {
+  private activeActionId: TransformActionId | 'none' = 'none';
+  private activeHandedness: string | null = null;
+  private candidateAction: TransformActionId | 'none' = 'none';
+  private candidateSinceMs = 0;
+  private releaseSinceMs = 0;
+  private lastActiveHandSeenMs = 0;
+  private lastFrameTimestamp = -1;
+  private disposed = false;
+  private readonly shapeAction = new ShapeAction();
+  private readonly actions: Record<TransformActionId, TransformAction> = {
     move: new MoveAction(),
     rotate: new RotateAction(),
     scale: new ScaleAction(),
-    shape: new ShapeAction(),
+    shape: this.shapeAction,
   };
   private readonly unsubscribe: () => void;
   private readonly manager: SceneManager;
   private readonly store: ObjectStore;
   private readonly listeners = new Set<SceneControllerListener>();
+  private readonly selectionRaycaster = new THREE.Raycaster();
+  private readonly missEndpoint = new THREE.Vector3();
 
   constructor(manager: SceneManager, engine: GestureEngine) {
     this.manager = manager;
@@ -72,10 +87,14 @@ export class SceneController {
       action: this.activeAction ? this.activeActionId : this.previousAction,
       selectedName: selected?.name ?? null,
       isMoving: this.activeAction !== null,
+      shapeAxis: this.activeActionId === 'shape' ? this.shapeAction.axisLabel : null,
+      input: this.activeAction ? 'gesture' : null,
     };
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.unsubscribe();
     this.latestFrame = null;
     this.resetActiveAction();
@@ -87,7 +106,6 @@ export class SceneController {
   }
 
   private readonly handleFrame = (): void => {
-    const frame = this.latestFrame;
     if (this.manager.mouseInteractionActive) {
       this.resetActiveAction();
       this.manager.gestureCursor.hide();
@@ -96,8 +114,17 @@ export class SceneController {
       return;
     }
 
-    if (!frame || frame.hands.length === 0) {
-      this.resetActiveAction();
+    const frame = this.latestFrame;
+    if (!frame || frame.timestampMs === this.lastFrameTimestamp) return;
+    this.lastFrameTimestamp = frame.timestampMs;
+
+    if (this.activeAction) {
+      this.updateActiveAction(frame);
+      return;
+    }
+
+    if (!frame.hands.length) {
+      this.resetCandidate();
       this.manager.gestureCursor.hide();
       this.previousAction = 'none';
       this.emitSnapshot();
@@ -106,20 +133,21 @@ export class SceneController {
 
     const pointingHand = frame.hands.find((hand) => actionFor(hand) === 'select');
     if (pointingHand) {
-      this.resetActiveAction();
+      this.resetCandidate();
       const fingertip = fingertipScreen(pointingHand);
-      const ray = selectionRayAtNormalizedPoint(fingertip, this.manager.camera);
       const hit = raycastSelectableAtNormalizedPoint(
         fingertip,
         this.manager.camera,
         this.store.group,
+        this.selectionRaycaster,
       );
+      const ray = this.selectionRaycaster.ray;
 
       // Make the exact selection ray visible so pointing can be debugged and
       // aimed without relying on the gesture label alone.
       this.manager.gestureCursor.show(
         ray,
-        hit?.point ?? rayEndpoint(ray, 12),
+        hit?.point ?? this.missEndpoint.copy(ray.origin).addScaledVector(ray.direction, 12),
         hit !== null,
       );
 
@@ -140,35 +168,95 @@ export class SceneController {
 
     const primaryHand = frame.hands[0];
     const action = actionFor(primaryHand);
-    const nextAction = this.actions[action];
     const selected = this.store.selected;
 
-    if (nextAction && selected) {
-      if (this.activeAction !== nextAction || nextAction.object !== selected) {
-        this.resetActiveAction();
+    if (selected && isTransformAction(action)) {
+      if (this.advanceCandidate(action, frame.timestampMs)) {
+        const nextAction = this.actions[action];
         nextAction.start(selected, primaryHand, this.manager.camera);
         this.activeAction = nextAction;
         this.activeActionId = action;
+        this.activeHandedness = primaryHand.handedness;
+        this.lastActiveHandSeenMs = frame.timestampMs;
+        this.resetCandidate();
       }
-      nextAction.update(primaryHand, this.manager.camera);
-      this.store.updateSelectionOutline();
     } else {
-      this.resetActiveAction();
+      this.resetCandidate();
     }
 
     this.previousAction = action;
     this.emitSnapshot();
   };
 
+  private updateActiveAction(frame: GestureFrame): void {
+    const activeHand = this.findActiveHand(frame.hands);
+    if (!activeHand) {
+      if (frame.timestampMs - this.lastActiveHandSeenMs >= HAND_LOST_GRACE_MS) {
+        this.resetActiveAction();
+        this.previousAction = 'none';
+        this.emitSnapshot();
+      }
+      return;
+    }
+
+    this.lastActiveHandSeenMs = frame.timestampMs;
+    const recognizedAction = actionFor(activeHand);
+    const releaseRequested =
+      activeHand.score >= MIN_RELEASE_SCORE &&
+      (recognizedAction === 'create' || recognizedAction === 'select');
+
+    if (releaseRequested) {
+      if (!this.releaseSinceMs) this.releaseSinceMs = frame.timestampMs;
+      if (frame.timestampMs - this.releaseSinceMs >= ACTION_RELEASE_MS) {
+        this.resetActiveAction();
+        this.previousAction = 'none';
+        this.emitSnapshot();
+      }
+      return;
+    }
+    this.releaseSinceMs = 0;
+
+    this.activeAction?.update(activeHand, this.manager.camera);
+    this.store.updateSelectionOutline();
+    this.previousAction = this.activeActionId;
+    this.emitSnapshot();
+  }
+
+  private findActiveHand(hands: HandResult[]): HandResult | null {
+    if (!hands.length) return null;
+    return (
+      hands.find((hand) => hand.handedness === this.activeHandedness) ??
+      (hands.length === 1 ? hands[0] : null)
+    );
+  }
+
+  private advanceCandidate(action: TransformActionId, timestampMs: number): boolean {
+    if (this.candidateAction !== action) {
+      this.candidateAction = action;
+      this.candidateSinceMs = timestampMs;
+      return false;
+    }
+    return timestampMs - this.candidateSinceMs >= ACTION_START_MS;
+  }
+
+  private resetCandidate(): void {
+    this.candidateAction = 'none';
+    this.candidateSinceMs = 0;
+  }
+
   private resetActiveAction(): void {
     this.activeAction?.reset();
     this.activeAction = null;
     this.activeActionId = 'none';
+    this.activeHandedness = null;
+    this.releaseSinceMs = 0;
+    this.lastActiveHandSeenMs = 0;
+    this.resetCandidate();
   }
 
   private emitSnapshot(): void {
     const snapshot = this.snapshot();
-    const key = `${snapshot.action}:${snapshot.selectedName ?? ''}:${snapshot.isMoving}`;
+    const key = `${snapshot.action}:${snapshot.selectedName ?? ''}:${snapshot.isMoving}:${snapshot.shapeAxis ?? ''}:${snapshot.input ?? ''}`;
     if (key === this.lastSnapshotKey) return;
     this.lastSnapshotKey = key;
     this.listeners.forEach((listener) => listener(snapshot));
@@ -178,4 +266,8 @@ export class SceneController {
 function actionFor(hand: HandResult): ActionId {
   if (hand.score < MIN_GESTURE_SCORE) return 'none';
   return GESTURE_CONFIG[hand.gesture]?.action ?? 'none';
+}
+
+function isTransformAction(action: ActionId): action is TransformActionId {
+  return action === 'move' || action === 'rotate' || action === 'scale' || action === 'shape';
 }

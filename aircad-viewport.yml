@@ -1,0 +1,72 @@
+- generic [ref=f12e3] [box=0,0,1536,776]:
+  - banner [ref=f12e5] [box=0,0,1536,42]:
+    - generic [ref=f12e6] [box=12,5,182,31]:
+      - generic [ref=f12e7] [box=12,9,24,24]: A
+      - generic [ref=f12e8] [box=44,5,111,31]:
+        - heading "AirCad" [level=1] [ref=f12e9] [box=44,5,111,18]
+        - generic [ref=f12e10] [box=44,24,111,12]: Gesture 3D Modeling
+    - navigation "Application menu" [ref=f12e11] [box=216,0,161,41]:
+      - button "Scene" [ref=f12e12] [cursor=pointer] [box=216,0,51,41]
+      - button "Gesture" [ref=f12e13] [cursor=pointer] [box=269,0,61,41]
+      - button "View" [ref=f12e14] [cursor=pointer] [box=332,0,45,41]
+    - generic [ref=f12e15] [box=1298,7,226,28]:
+      - generic [ref=f12e17] [box=1311,14,118,13]: requesting camera…
+      - button "Camera" [pressed] [ref=f12e18] [cursor=pointer] [box=1446,7,78,28]:
+        - generic [ref=f12e19] [box=1456,13,10,15]: ◉
+        - text: Camera
+  - complementary "Tools" [ref=f12e20] [box=0,42,68,703]:
+    - button "Box" [ref=f12e22] [cursor=pointer] [box=6,73,55,45]
+    - button "Select" [ref=f12e25] [cursor=pointer] [box=6,121,55,45]:
+      - generic [ref=f12e26] [box=25,126,17,17]: ⌖
+    - button "Move" [ref=f12e28] [cursor=pointer] [box=6,168,55,45]:
+      - generic [ref=f12e29] [box=25,174,17,17]: ✥
+    - generic [ref=f12e32] [box=6,235,55,12]: Export
+    - button "STL" [disabled] [ref=f12e33] [cursor=pointer] [box=6,255,55,27]
+    - button "OBJ" [disabled] [ref=f12e34] [cursor=pointer] [box=6,285,55,27]
+    - button "GLTF" [disabled] [ref=f12e35] [cursor=pointer] [box=6,315,55,27]
+  - complementary "Gesture and scene properties" [ref=f12e36] [box=1278,42,258,703]:
+    - generic [ref=f12e37] [box=1279,42,257,34]:
+      - generic [ref=f12e38] [box=1291,51,51,14]: Properties
+      - generic [ref=f12e39] [box=1519,47,5,22]: ⋮
+    - generic [ref=f12e40] [box=1279,76,257,131]:
+      - generic [ref=f12e41] [box=1291,90,233,12]: Gesture input
+      - generic [ref=f12e42] [box=1291,112,233,56]:
+        - generic [ref=f12e43] [box=1302,122,212,12]: Waiting
+        - strong [ref=f12e44] [box=1302,137,212,22]: No gesture
+      - generic [ref=f12e45] [box=1291,178,233,14]:
+        - generic [ref=f12e46] [box=1291,178,40,14]: Tracking
+        - strong [ref=f12e47] [box=1413,179,111,13]: requesting camera…
+    - generic [ref=f12e48] [box=1279,207,257,104]:
+      - generic [ref=f12e49] [box=1291,221,233,12]: Active object
+      - strong [ref=f12e52] [box=1309,243,96,14]: No object selected
+      - paragraph [ref=f12e53] [box=1309,268,215,29]: Click the box, or point at it with your index finger to select it.
+  - region "Gesture reference" [ref=f12e54] [box=68,745,1210,31]:
+    - generic [ref=f12e56] [box=195,755,1073,13]:
+      - generic [ref=f12e57] [box=195,755,110,13]:
+        - generic [ref=f12e58] [box=195,755,27,13]: Select
+        - generic [ref=f12e59] [box=227,755,78,13]: point at an object
+      - generic [ref=f12e60] [box=319,755,155,13]:
+        - generic [ref=f12e61] [box=319,755,29,13]: Create
+        - generic [ref=f12e62] [box=353,755,121,13]: spawn the current primitive
+      - generic [ref=f12e63] [box=488,755,145,13]:
+        - generic [ref=f12e64] [box=488,755,26,13]: Move
+        - generic [ref=f12e65] [box=519,755,114,13]: grab & drag a held object
+      - generic [ref=f12e66] [box=647,755,163,13]:
+        - generic [ref=f12e67] [box=647,755,30,13]: Rotate
+        - generic [ref=f12e68] [box=681,755,128,13]: palm angle → object rotation
+      - generic [ref=f12e69] [box=824,755,161,13]:
+        - generic [ref=f12e70] [box=824,755,28,13]: Resize
+        - generic [ref=f12e71] [box=857,755,128,13]: thumb–index distance → size
+      - generic [ref=f12e72] [box=999,755,155,13]:
+        - generic [ref=f12e73] [box=999,755,28,13]: Shape
+        - generic [ref=f12e74] [box=1031,755,123,13]: stretch / squash along palm
+      - generic [ref=f12e75] [box=1168,755,154,13]:
+        - generic [ref=f12e76] [box=1168,755,29,13]: Delete
+        - generic [ref=f12e77] [box=1202,755,119,13]: remove the selected object
+      - generic [ref=f12e78] [box=1336,755,159,13]:
+        - generic [ref=f12e79] [box=1336,755,41,13]: Combine
+        - generic [ref=f12e80] [box=1381,755,113,13]: two fists grab two objects
+  - region "Camera preview" [ref=f12e81] [box=1012,513,254,218]:
+    - generic [ref=f12e82] [box=1013,514,252,27]:
+      - generic [ref=f12e83] [box=1021,521,81,12]: Camera preview
+      - generic [ref=f12e84] [box=1229,522,28,11]: LIVE

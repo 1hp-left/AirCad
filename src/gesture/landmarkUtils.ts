@@ -9,6 +9,14 @@ import * as THREE from 'three';
 
 export type Vec3 = { x: number; y: number; z: number };
 
+const PALM_LANDMARKS = [
+  LANDMARK.WRIST,
+  LANDMARK.INDEX_MCP,
+  LANDMARK.MIDDLE_MCP,
+  LANDMARK.RING_MCP,
+  LANDMARK.PINKY_MCP,
+] as const;
+
 /** Euclidean distance between two landmark points (any space). */
 export function distance(a: Vec3, b: Vec3): number {
   const dx = a.x - b.x;
@@ -35,22 +43,15 @@ export function pinchDistance(hand: HandResult): number {
  * and lies inside the palm, unlike any single landmark.
  */
 export function palmCenter(hand: HandResult): Vec3 {
-  const idx = [
-    LANDMARK.WRIST,
-    LANDMARK.INDEX_MCP,
-    LANDMARK.MIDDLE_MCP,
-    LANDMARK.RING_MCP,
-    LANDMARK.PINKY_MCP,
-  ];
   let x = 0,
     y = 0,
     z = 0;
-  for (const i of idx) {
+  for (const i of PALM_LANDMARKS) {
     x += hand.landmarks[i].x;
     y += hand.landmarks[i].y;
     z += hand.landmarks[i].z;
   }
-  const n = idx.length;
+  const n = PALM_LANDMARKS.length;
   return { x: x / n, y: y / n, z: z / n };
 }
 
@@ -129,7 +130,10 @@ function dot(a: Vec3, b: Vec3): number {
 }
 
 /** Convenience: palm normal as a THREE.Vector3 (for the scene side). */
-export function palmNormalVector3(hand: HandResult): THREE.Vector3 {
+export function palmNormalVector3(
+  hand: HandResult,
+  target = new THREE.Vector3(),
+): THREE.Vector3 {
   const n = palmNormal(hand);
-  return new THREE.Vector3(n.x, n.y, n.z);
+  return target.set(n.x, n.y, n.z);
 }

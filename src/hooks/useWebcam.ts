@@ -13,10 +13,10 @@ export type WebcamStatus = 'idle' | 'requesting' | 'ready' | 'denied' | 'no-devi
 export function useWebcam() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<WebcamStatus>('idle');
-  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let activeStream: MediaStream | null = null;
 
     async function start() {
       setStatus('requesting');
@@ -33,7 +33,7 @@ export function useWebcam() {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
-        streamRef.current = stream;
+        activeStream = stream;
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
@@ -51,8 +51,7 @@ export function useWebcam() {
     start();
     return () => {
       cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+      activeStream?.getTracks().forEach((track) => track.stop());
     };
   }, []);
 

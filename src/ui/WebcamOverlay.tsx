@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 import type { GestureEngine } from '../gesture/GestureEngine';
 import type { GestureFrame } from '../gesture/types';
 import { LANDMARK } from '../gesture/types';
@@ -43,7 +43,7 @@ const CONNECTIONS: Array<[number, number]> = [
 
 const COLORS = ['#4fd1c5', '#f6ad55']; // hand 0 / hand 1
 
-export function WebcamOverlay({ engineRef }: { engineRef: RefObject<GestureEngine | null> }) {
+export function WebcamOverlay({ engine }: { engine: GestureEngine | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -62,64 +62,44 @@ export function WebcamOverlay({ engineRef }: { engineRef: RefObject<GestureEngin
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    let off: (() => void) | null = null;
-
-    const attach = () => {
-      const engine = engineRef.current;
-      if (!engine) {
-        // Retry until the engine exists (it's created after the video is ready).
-        return false;
-      }
-      off = engine.on((frame: GestureFrame) => draw(ctx, canvas, frame));
-      return true;
-    };
-
-    // The engine is created asynchronously once the webcam is ready. Poll
-    // briefly to attach; once attached we're done.
-    let tries = 0;
-    const timer = setInterval(() => {
-      if (attach() || ++tries > 40) clearInterval(timer);
-    }, 150);
+    const unsubscribe = engine?.on((frame) => draw(ctx, canvas, frame));
 
     return () => {
-      clearInterval(timer);
       ro.disconnect();
-      off?.();
+      unsubscribe?.();
     };
-  }, [engineRef]);
-
-  const draw = (
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    frame: GestureFrame,
-  ) => {
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    frame.hands.forEach((hand, hi) => {
-      const color = COLORS[hi % COLORS.length];
-      const pts = hand.landmarks.map((l) => ({ x: l.x * w, y: l.y * h }));
-
-      // Bones.
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = color;
-      ctx.beginPath();
-      for (const [a, b] of CONNECTIONS) {
-        ctx.moveTo(pts[a].x, pts[a].y);
-        ctx.lineTo(pts[b].x, pts[b].y);
-      }
-      ctx.stroke();
-
-      // Joints.
-      ctx.fillStyle = color;
-      for (const p of pts) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-  };
+  }, [engine]);
 
   return <canvas ref={canvasRef} className="overlay" />;
+}
+
+function draw(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  frame: GestureFrame,
+): void {
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+
+  frame.hands.forEach((hand, handIndex) => {
+    const color = COLORS[handIndex % COLORS.length];
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (const [a, b] of CONNECTIONS) {
+      const start = hand.landmarks[a];
+      const end = hand.landmarks[b];
+      ctx.moveTo(start.x * width, start.y * height);
+      ctx.lineTo(end.x * width, end.y * height);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    for (const point of hand.landmarks) {
+      ctx.beginPath();
+      ctx.arc(point.x * width, point.y * height, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
 }

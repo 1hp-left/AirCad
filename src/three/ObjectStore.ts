@@ -25,16 +25,11 @@ export class ObjectStore {
     return object;
   }
 
-  /** Direct children are modeling roots; the outline is explicitly excluded. */
-  getSelectableObjects(): THREE.Object3D[] {
-    return this.group.children.filter(
-      (object) =>
-        object !== this.selectionOutline && object.userData.aircadSelectable !== false,
-    );
-  }
-
   select(object: THREE.Object3D | null): void {
-    if (object && !this.getSelectableObjects().includes(object)) return;
+    if (
+      object &&
+      (object.parent !== this.group || object.userData.aircadSelectable === false)
+    ) return;
     if (object === this.selectedObject) {
       this.selectionOutline?.update();
       return;

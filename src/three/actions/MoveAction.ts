@@ -12,6 +12,7 @@ const MIN_HAND_SIZE = 0.015;
 export class MoveAction implements TransformAction {
   private grabbedObject: THREE.Object3D | null = null;
   private readonly worldOffset = new THREE.Vector3();
+  private readonly raycaster = new THREE.Raycaster();
   private grabDistance = 0;
   private baselineHandSize = 0;
 
@@ -26,7 +27,7 @@ export class MoveAction implements TransformAction {
   /** Capture the object/ray relationship at the instant the fist closes. */
   start(object: THREE.Object3D, hand: HandResult, camera: THREE.Camera): void {
     this.reset();
-    const ray = rayFromNormalizedPoint(palmCenter(hand), camera);
+    const ray = rayFromNormalizedPoint(palmCenter(hand), camera, this.raycaster);
     this.capture(object, ray);
     this.baselineHandSize = Math.max(normalizedHandSize(hand), MIN_HAND_SIZE);
   }
@@ -39,7 +40,10 @@ export class MoveAction implements TransformAction {
       MIN_DEPTH,
       MAX_DEPTH,
     );
-    this.updateAtDepth(rayFromNormalizedPoint(palmCenter(hand), camera), depth);
+    this.updateAtDepth(
+      rayFromNormalizedPoint(palmCenter(hand), camera, this.raycaster),
+      depth,
+    );
   }
 
   /** Capture a fixed-depth grab for mouse/pointer movement. */
@@ -51,10 +55,6 @@ export class MoveAction implements TransformAction {
   /** Update a pointer grab at its original camera-ray depth. */
   updateFromRay(ray: THREE.Ray): void {
     this.updateAtDepth(ray, this.grabDistance);
-  }
-
-  get grabDepth(): number {
-    return this.grabDistance;
   }
 
   /** Move the grabbed object along a ray at an explicit depth. */

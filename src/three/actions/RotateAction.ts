@@ -1,17 +1,23 @@
 import * as THREE from 'three';
-import { LANDMARK } from '../../gesture/types';
-import { palmNormalVector3 } from '../../gesture/landmarkUtils';
+import { palmCenter } from '../../gesture/landmarkUtils';
 import type { HandResult } from '../../gesture/types';
 import type { MouseTransformAction } from './TransformAction';
 
 const ROTATION_PER_PIXEL = 0.01;
+const ROTATION_PER_SCREEN = Math.PI * 2;
+const MOTION_DEAD_ZONE = 0.012;
 
-/** Rotates an object from the change in the hand's palm frame. */
+/** Rotates an object by using palm movement like a virtual trackball. */
 export class RotateAction implements MouseTransformAction {
   private target: THREE.Object3D | null = null;
   private readonly startQuaternion = new THREE.Quaternion();
-  private readonly baselineFrame = new THREE.Matrix4();
+  private readonly startPalm = new THREE.Vector2();
   private readonly dragDelta = new THREE.Quaternion();
+  private readonly yaw = new THREE.Quaternion();
+  private readonly pitch = new THREE.Quaternion();
+  private readonly cameraUp = new THREE.Vector3();
+  private readonly cameraRight = new THREE.Vector3();
+  private readonly dragEuler = new THREE.Euler(0, 0, 0, 'XYZ');
 
   get object(): THREE.Object3D | null {
     return this.target;
@@ -21,20 +27,29 @@ export class RotateAction implements MouseTransformAction {
     return this.target !== null;
   }
 
-  start(object: THREE.Object3D, hand: HandResult, _camera: THREE.Camera): void {
+  start(object: THREE.Object3D, hand: HandResult, camera: THREE.Camera): void {
     this.reset();
     this.target = object;
     this.startQuaternion.copy(object.quaternion);
-    this.baselineFrame.copy(frameForHand(hand));
+    const palm = palmCenter(hand);
+    // MediaPipe is unmirrored while the preview is mirrored. Store screen-space
+    // coordinates so moving right in the preview rotates right in the scene.
+    this.startPalm.set(1 - palm.x, palm.y);
+    this.cameraRight.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    this.cameraUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
   }
 
   update(hand: HandResult, _camera: THREE.Camera): void {
     if (!this.target) return;
 
-    const currentFrame = frameForHand(hand);
-    const delta = currentFrame.multiply(this.baselineFrame.clone().invert());
-    this.dragDelta.setFromRotationMatrix(delta).normalize();
-    this.target.quaternion.copy(this.startQuaternion).multiply(this.dragDelta).normalize();
+    const palm = palmCenter(hand);
+    const horizontal = removeDeadZone(1 - palm.x - this.startPalm.x);
+    const vertical = removeDeadZone(this.startPalm.y - palm.y);
+
+    this.yaw.setFromAxisAngle(this.cameraUp, horizontal * ROTATION_PER_SCREEN);
+    this.pitch.setFromAxisAngle(this.cameraRight, -vertical * ROTATION_PER_SCREEN);
+    this.dragDelta.copy(this.yaw).multiply(this.pitch);
+    this.target.quaternion.copy(this.dragDelta).multiply(this.startQuaternion).normalize();
   }
 
   startFromDrag(object: THREE.Object3D): void {
@@ -46,33 +61,23 @@ export class RotateAction implements MouseTransformAction {
   updateFromDrag(deltaX: number, deltaY: number): void {
     if (!this.target) return;
 
-    this.dragDelta.setFromEuler(
-      new THREE.Euler(deltaY * ROTATION_PER_PIXEL, deltaX * ROTATION_PER_PIXEL, 0, 'XYZ'),
-    );
+    this.dragEuler.set(deltaY * ROTATION_PER_PIXEL, deltaX * ROTATION_PER_PIXEL, 0);
+    this.dragDelta.setFromEuler(this.dragEuler);
     this.target.quaternion.copy(this.startQuaternion).multiply(this.dragDelta).normalize();
   }
 
   reset(): void {
     this.target = null;
     this.startQuaternion.identity();
-    this.baselineFrame.identity();
+    this.startPalm.set(0, 0);
     this.dragDelta.identity();
+    this.yaw.identity();
+    this.pitch.identity();
   }
 }
 
-function frameForHand(hand: HandResult): THREE.Matrix4 {
-  const normal = palmNormalVector3(hand).normalize();
-  const wrist = hand.landmarks[LANDMARK.WRIST];
-  const middle = hand.landmarks[LANDMARK.MIDDLE_MCP];
-  const up = new THREE.Vector3(middle.x - wrist.x, middle.y - wrist.y, middle.z - wrist.z);
-
-  // Remove the normal component so the frame remains orthonormal even when the
-  // landmark hand is viewed at an oblique angle.
-  up.addScaledVector(normal, -up.dot(normal));
-  if (up.lengthSq() < 1e-8) up.set(0, 1, 0);
-  up.normalize();
-
-  const right = new THREE.Vector3().crossVectors(up, normal).normalize();
-  const correctedUp = new THREE.Vector3().crossVectors(normal, right).normalize();
-  return new THREE.Matrix4().makeBasis(right, correctedUp, normal);
+function removeDeadZone(value: number): number {
+  const magnitude = Math.abs(value);
+  if (magnitude <= MOTION_DEAD_ZONE) return 0;
+  return Math.sign(value) * (magnitude - MOTION_DEAD_ZONE);
 }

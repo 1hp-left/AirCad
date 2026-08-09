@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 
-const CURSOR_LENGTH = 18;
 const BEAM_RADIUS = 0.012;
 const RING_INNER_RADIUS = 0.1;
 const RING_OUTER_RADIUS = 0.14;
@@ -21,6 +20,12 @@ export class GestureCursor {
   private readonly reticleMaterial: THREE.MeshBasicMaterial;
   private readonly center: THREE.Mesh;
   private readonly centerMaterial: THREE.MeshBasicMaterial;
+  private readonly direction = new THREE.Vector3();
+  private readonly start = new THREE.Vector3();
+  private readonly midpoint = new THREE.Vector3();
+  private readonly backward = new THREE.Vector3();
+  private readonly yAxis = new THREE.Vector3(0, 1, 0);
+  private readonly zAxis = new THREE.Vector3(0, 0, 1);
 
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group();
@@ -72,14 +77,13 @@ export class GestureCursor {
 
   /** Show the ray and place its reticle at the current hit or fallback point. */
   show(ray: THREE.Ray, endpoint: THREE.Vector3, hit: boolean): void {
-    const direction = ray.direction.clone().normalize();
-    const start = ray.origin.clone().addScaledVector(direction, 0.35);
+    const direction = this.direction.copy(ray.direction).normalize();
+    const start = this.start.copy(ray.origin).addScaledVector(direction, 0.35);
     const length = Math.max(start.distanceTo(endpoint), 0.01);
-    const midpoint = start.clone().lerp(endpoint, 0.5);
 
-    this.beam.position.copy(midpoint);
+    this.beam.position.copy(this.midpoint.copy(start).lerp(endpoint, 0.5));
     this.beam.scale.set(1, length, 1);
-    this.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+    this.beam.quaternion.setFromUnitVectors(this.yAxis, direction);
 
     const color = hit ? 0x4fd1c5 : 0xf6ad55;
     this.beamMaterial.color.setHex(color);
@@ -89,17 +93,11 @@ export class GestureCursor {
     this.center.position.copy(endpoint);
     // RingGeometry lies in the XY plane; face it back toward the camera ray.
     this.reticle.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      direction.clone().negate(),
+      this.zAxis,
+      this.backward.copy(direction).negate(),
     );
     this.center.quaternion.copy(this.reticle.quaternion);
     this.group.visible = true;
-  }
-
-  /** Show a full-length ray when no pointing hand is active. */
-  showFallback(ray: THREE.Ray): void {
-    const endpoint = ray.origin.clone().addScaledVector(ray.direction, CURSOR_LENGTH);
-    this.show(ray, endpoint, false);
   }
 
   hide(): void {

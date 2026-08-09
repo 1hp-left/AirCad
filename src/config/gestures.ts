@@ -28,14 +28,18 @@ export interface GestureConfig {
   hint: string;
 }
 
-const shape = { action: 'shape' as const, label: 'Shape', hint: 'stretch / squash along palm' };
+const shape = {
+  action: 'shape' as const,
+  label: 'Shape',
+  hint: 'upright or sideways, then move up / down',
+};
 
 /** Built-in + (future) custom gestures, mapped to AirCad actions. */
 export const GESTURE_CONFIG: Record<string, GestureConfig> = {
   [Gesture.NONE]: { action: 'none', label: 'Idle', hint: 'no action' },
   [Gesture.POINTING_UP]: { action: 'select', label: 'Select', hint: 'point at an object' },
-  [Gesture.CLOSED_FIST]: { action: 'move', label: 'Move', hint: 'grab & drag a held object' },
-  [Gesture.VICTORY]: { action: 'rotate', label: 'Rotate', hint: 'palm angle → object rotation' },
+  [Gesture.CLOSED_FIST]: { action: 'move', label: 'Move', hint: 'grab, move, open to finish' },
+  [Gesture.VICTORY]: { action: 'rotate', label: 'Rotate', hint: 'then move sideways / vertically' },
   [Gesture.THUMB_UP]: { action: 'scale', label: 'Resize', hint: 'thumb–index distance → size' },
   [Gesture.I_LOVE_YOU]: shape,
   [Gesture.L_SHAPE]: shape,

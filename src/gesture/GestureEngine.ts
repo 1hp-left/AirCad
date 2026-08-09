@@ -1,8 +1,4 @@
-import {
-  FilesetResolver,
-  GestureRecognizer,
-  type GestureRecognizerResult,
-} from '@mediapipe/tasks-vision';
+import type { GestureRecognizer, GestureRecognizerResult } from '@mediapipe/tasks-vision';
 import type {
   GestureFrame,
   GestureListener,
@@ -32,19 +28,14 @@ export class GestureEngine {
   private video: HTMLVideoElement | null = null;
   private rafId = 0;
   private lastVideoTime = -1;
-  private listeners = new Set<GestureListener>();
-  private statusListeners = new Set<(s: GestureEngineStatus) => void>();
+  private disposed = false;
+  private readonly listeners = new Set<GestureListener>();
+  private readonly statusListeners = new Set<(s: GestureEngineStatus) => void>();
 
   // Per-hand, per-landmark, per-axis filter banks. Indexed by hand index then
   // landmark index then axis (x=0,y=1,z=2). Recreated when hand count changes.
   private filters: OneEuroFilter[][][] = [];
-  private filterTime = 0; // seconds, monotonic-ish from rAF timestamps
-
-  private readonly modelPath: string;
-
-  constructor(modelPath = '/models/gesture_recognizer.task') {
-    this.modelPath = modelPath;
-  }
+  constructor(private readonly modelPath = '/models/gesture_recognizer.task') {}
 
   // ---------------------------------------------------------------- public API
 
@@ -76,10 +67,13 @@ export class GestureEngine {
     this.video = video;
     this.setStatus('loading');
     try {
+      const { FilesetResolver, GestureRecognizer } = await import('@mediapipe/tasks-vision');
+      if (this.disposed) return;
       const vision = await FilesetResolver.forVisionTasks(
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm',
       );
-      this.recognizer = await GestureRecognizer.createFromOptions(vision, {
+      if (this.disposed) return;
+      const recognizer = await GestureRecognizer.createFromOptions(vision, {
         baseOptions: { modelAssetPath: this.modelPath },
         runningMode: 'VIDEO',
         numHands: 2,
@@ -87,17 +81,23 @@ export class GestureEngine {
         minHandPresenceConfidence: 0.5,
         minTrackingConfidence: 0.5,
       });
+      if (this.disposed) {
+        recognizer.close();
+        return;
+      }
+      this.recognizer = recognizer;
       this.setStatus('running');
       this.startLoop();
     } catch (err) {
+      if (this.disposed) return;
       console.error('[GestureEngine] init failed:', err);
       this.setStatus('error');
       throw err;
     }
   }
 
-  startLoop(): void {
-    if (this.rafId) return;
+  private startLoop(): void {
+    if (this.rafId || this.disposed) return;
     const loop = () => {
       this.rafId = requestAnimationFrame(loop);
       this.tick();
@@ -107,10 +107,13 @@ export class GestureEngine {
 
   /** Stop emitting and release the recognizer. */
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     cancelAnimationFrame(this.rafId);
     this.rafId = 0;
     this.recognizer?.close();
     this.recognizer = null;
+    this.video = null;
     this.listeners.clear();
     this.statusListeners.clear();
   }
@@ -118,36 +121,34 @@ export class GestureEngine {
   // ---------------------------------------------------------------- internals
 
   private tick(): void {
+    if (this.disposed) return;
     const video = this.video;
     const recognizer = this.recognizer;
     if (!video || !recognizer) return;
     if (video.readyState < 2) return; // not enough data yet
 
-    const now = performance.now() / 1000; // seconds
-    this.filterTime = now;
-
     // Only run recognition on genuinely new frames — MediaPipe warns if the
     // same timestamp is passed twice.
     if (video.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = video.currentTime;
+    const timestampMs = performance.now();
 
     let raw: GestureRecognizerResult;
     try {
-      raw = recognizer.recognizeForVideo(video, now * 1000);
+      raw = recognizer.recognizeForVideo(video, timestampMs);
     } catch {
       return; // transient — next frame retries
     }
 
-    const hands = this.decode(raw);
     const frame: GestureFrame = {
-      hands,
-      timestampMs: now * 1000,
+      hands: this.decode(raw, timestampMs / 1000),
+      timestampMs,
     };
     this.listeners.forEach((l) => l(frame));
   }
 
   /** Decode MediaPipe's result object into our HandResult[] + smooth landmarks. */
-  private decode(raw: GestureRecognizerResult): HandResult[] {
+  private decode(raw: GestureRecognizerResult, timeS: number): HandResult[] {
     const nHands = raw.landmarks?.length ?? 0;
     this.ensureFilterBank(nHands);
 
@@ -160,13 +161,11 @@ export class GestureEngine {
       const gesture = top?.categoryName ?? 'None';
       const score = top?.score ?? 0;
 
-      const smoothed = this.smoothLandmarks(h, landmarks);
-
       hands.push({
         handedness,
         gesture,
         score,
-        landmarks: smoothed,
+        landmarks: this.smoothLandmarks(h, landmarks, timeS),
         worldLandmarks, // world landmarks we leave unsmoothed (lower noise, sparser use)
       });
     }
@@ -192,13 +191,16 @@ export class GestureEngine {
   }
 
   /** Apply the 1-Euro filter to every landmark's x/y/z in normalized space. */
-  private smoothLandmarks(handIdx: number, raw: { x: number; y: number; z: number }[]): { x: number; y: number; z: number }[] {
-    const t = this.filterTime;
+  private smoothLandmarks(
+    handIdx: number,
+    raw: { x: number; y: number; z: number }[],
+    timeS: number,
+  ): { x: number; y: number; z: number }[] {
     const bank = this.filters[handIdx];
     return raw.map((lm, l) => ({
-      x: bank[l][0].filter(lm.x, t),
-      y: bank[l][1].filter(lm.y, t),
-      z: bank[l][2].filter(lm.z, t),
+      x: bank[l][0].filter(lm.x, timeS),
+      y: bank[l][1].filter(lm.y, timeS),
+      z: bank[l][2].filter(lm.z, timeS),
     }));
   }
 }

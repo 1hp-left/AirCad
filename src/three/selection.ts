@@ -25,13 +25,9 @@ function intersectSelectable(
   raycaster: THREE.Raycaster,
   objects: THREE.Group,
 ): { object: THREE.Object3D; point: THREE.Vector3 } | null {
-  const candidates = objects.children.filter(
-    (object) => object.userData.aircadSelectable !== false,
-  );
-
-  for (const hit of raycaster.intersectObjects(candidates, true)) {
+  for (const hit of raycaster.intersectObjects(objects.children, true)) {
     const root = selectableRoot(hit.object, objects);
-    if (root) return { object: root, point: hit.point.clone() };
+    if (root) return { object: root, point: hit.point };
   }
   return null;
 }
@@ -42,10 +38,9 @@ export function raycastSelectableAtNdc(
   camera: THREE.Camera,
   objects: THREE.Group,
   raycaster = new THREE.Raycaster(),
-): { ray: THREE.Ray; object: THREE.Object3D; point: THREE.Vector3 } | null {
+): { object: THREE.Object3D; point: THREE.Vector3 } | null {
   raycaster.setFromCamera(ndc, camera);
-  const hit = intersectSelectable(raycaster, objects);
-  return hit ? { ray: raycaster.ray.clone(), ...hit } : null;
+  return intersectSelectable(raycaster, objects);
 }
 
 /** Build a world-space ray from a normalized webcam point. */
@@ -55,7 +50,7 @@ export function rayFromNormalizedPoint(
   raycaster = new THREE.Raycaster(),
 ): THREE.Ray {
   raycaster.setFromCamera(normalizedToNdc(point), camera);
-  return raycaster.ray.clone();
+  return raycaster.ray;
 }
 
 /**
@@ -69,33 +64,9 @@ export function raycastSelectableAtNormalizedPoint(
   camera: THREE.Camera,
   objects: THREE.Group,
   raycaster = new THREE.Raycaster(),
-): { ray: THREE.Ray; object: THREE.Object3D; point: THREE.Vector3 } | null {
+): { object: THREE.Object3D; point: THREE.Vector3 } | null {
   raycaster.setFromCamera(normalizedToNdc(point), camera);
-  const hit = intersectSelectable(raycaster, objects);
-  return hit ? { ray: raycaster.ray.clone(), ...hit } : null;
-}
-
-/** Return the closest selectable object under a normalized screen point. */
-export function selectObjectAtNormalizedPoint(
-  point: Pick<Vec3, 'x' | 'y'>,
-  camera: THREE.Camera,
-  objects: THREE.Group,
-  raycaster = new THREE.Raycaster(),
-): THREE.Object3D | null {
-  return raycastSelectableAtNormalizedPoint(point, camera, objects, raycaster)?.object ?? null;
-}
-
-/** Return a point some distance along a ray when it misses every object. */
-export function rayEndpoint(ray: THREE.Ray, distance: number): THREE.Vector3 {
-  return ray.origin.clone().addScaledVector(ray.direction, distance);
-}
-
-/** Build the same ray used for selection, for cursor visualization. */
-export function selectionRayAtNormalizedPoint(
-  point: Pick<Vec3, 'x' | 'y'>,
-  camera: THREE.Camera,
-): THREE.Ray {
-  return rayFromNormalizedPoint(point, camera);
+  return intersectSelectable(raycaster, objects);
 }
 
 function selectableRoot(object: THREE.Object3D, group: THREE.Group): THREE.Object3D | null {
