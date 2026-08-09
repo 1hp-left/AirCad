@@ -1,0 +1,45 @@
+- generic [ref=f4e2]:
+  - generic [ref=f4e4]:
+    - generic [ref=f4e5]:
+      - heading "AirCad" [level=1] [ref=f4e6]
+      - generic [ref=f4e7]: Gesture 3D Modeling
+    - generic [ref=f4e8]:
+      - generic [ref=f4e9]: Tools
+      - button "Box" [ref=f4e11] [cursor=pointer]
+      - generic [ref=f4e12]: Export
+      - generic [ref=f4e13]:
+        - button "STL" [ref=f4e14] [cursor=pointer]
+        - button "OBJ" [ref=f4e15] [cursor=pointer]
+        - button "GLTF" [ref=f4e16] [cursor=pointer]
+  - generic [ref=f4e17]:
+    - generic [ref=f4e18]: Gesture
+    - generic [ref=f4e19]: —
+    - generic [ref=f4e20]: requesting camera…
+  - generic [ref=f4e21]:
+    - heading "Gestures" [level=2] [ref=f4e22]
+    - table [ref=f4e23]:
+      - rowgroup [ref=f4e24]:
+        - row [ref=f4e25]:
+          - cell "Select" [ref=f4e26]
+          - cell "point at an object" [ref=f4e27]
+        - row [ref=f4e28]:
+          - cell "Create" [ref=f4e29]
+          - cell "spawn the current primitive" [ref=f4e30]
+        - row [ref=f4e31]:
+          - cell "Move" [ref=f4e32]
+          - cell "grab & drag a held object" [ref=f4e33]
+        - row [ref=f4e34]:
+          - cell "Rotate" [ref=f4e35]
+          - cell "palm angle → object rotation" [ref=f4e36]
+        - row [ref=f4e37]:
+          - cell "Resize" [ref=f4e38]
+          - cell "thumb–index distance → size" [ref=f4e39]
+        - row [ref=f4e40]:
+          - cell "Shape" [ref=f4e41]
+          - cell "stretch / squash along palm" [ref=f4e42]
+        - row [ref=f4e43]:
+          - cell "Delete" [ref=f4e44]
+          - cell "remove the selected object" [ref=f4e45]
+        - row [ref=f4e46]:
+          - cell "Combine" [ref=f4e47]
+          - cell "two fists grab two objects" [ref=f4e48]

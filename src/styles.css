@@ -1,0 +1,615 @@
+:root {
+  --viewport: #252525;
+  --chrome: #181818;
+  --panel: #242424;
+  --panel-raised: #2d2d2d;
+  --panel-hover: #383838;
+  --line: #101010;
+  --line-soft: #3b3b3b;
+  --fg: #e2e2e2;
+  --fg-dim: #9b9b9b;
+  --fg-muted: #707070;
+  --accent: #e88b35;
+  --accent-soft: rgba(232, 139, 53, 0.18);
+  --tracking: #53b9b0;
+  --danger: #d85c5c;
+  font-family: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--viewport);
+  color: var(--fg);
+}
+
+button {
+  font: inherit;
+}
+
+.editor-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--viewport);
+}
+
+/* Three.js fills the shell; Blender-like chrome is layered above it. */
+#scene-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.topbar,
+.tool-shelf,
+.properties-panel,
+.bottom-panel,
+.webcam-wrap {
+  position: absolute;
+  z-index: 10;
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+
+.topbar {
+  inset: 0 0 auto;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 12px;
+  border-width: 0 0 1px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 182px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: #171717;
+  background: var(--accent);
+  border-radius: 3px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.brand h1 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.brand span:not(.brand-mark) {
+  display: block;
+  margin-top: 1px;
+  color: var(--fg-muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.menu {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  gap: 2px;
+}
+
+.menu button,
+.camera-toggle {
+  border: 0;
+  color: var(--fg-dim);
+  background: transparent;
+  cursor: pointer;
+}
+
+.menu button {
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.menu button:hover,
+.camera-toggle:hover {
+  color: var(--fg);
+  background: var(--panel-hover);
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+}
+
+.status-dot.live {
+  background: var(--tracking);
+  box-shadow: 0 0 0 2px rgba(83, 185, 176, 0.15);
+}
+
+.camera-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-left: 10px;
+  padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.camera-toggle.active {
+  color: var(--accent);
+  border-color: #805126;
+  background: var(--accent-soft);
+}
+
+.camera-icon {
+  color: currentColor;
+  font-size: 11px;
+}
+
+.tool-shelf {
+  top: 42px;
+  bottom: 31px;
+  left: 0;
+  width: 68px;
+  padding: 9px 6px;
+  border-width: 0 1px 0 0;
+}
+
+.shelf-section-label,
+.section-heading,
+.bottom-heading {
+  color: var(--fg-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shelf-section-label {
+  margin: 2px 0 8px;
+  text-align: center;
+}
+
+.shelf-tool {
+  display: flex;
+  width: 100%;
+  min-height: 43px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 3px;
+  padding: 5px 2px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--fg-dim);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.shelf-tool:hover {
+  color: var(--fg);
+  background: var(--panel-hover);
+}
+
+.shelf-tool.active {
+  color: var(--accent);
+  border-color: #805126;
+  background: var(--accent-soft);
+}
+
+.shelf-tool.compact {
+  min-height: 27px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.tool-glyph {
+  display: block;
+  width: 17px;
+  height: 17px;
+  color: currentColor;
+}
+
+.tool-glyph.cube {
+  border: 1px solid currentColor;
+  transform: rotate(30deg) skewY(-12deg) scale(0.8);
+}
+
+.tool-glyph.pointer {
+  font-size: 19px;
+  line-height: 15px;
+}
+
+.tool-glyph.move {
+  font-size: 19px;
+  line-height: 15px;
+}
+
+.shelf-divider {
+  height: 1px;
+  margin: 10px 4px 11px;
+  background: var(--line-soft);
+}
+
+.properties-panel {
+  top: 42px;
+  right: 0;
+  bottom: 31px;
+  width: 258px;
+  overflow: auto;
+  border-width: 0 0 0 1px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.panel-menu {
+  color: var(--fg-muted);
+  font-size: 16px;
+}
+
+.property-section {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.section-heading {
+  margin-bottom: 10px;
+}
+
+.gesture-value {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+
+.gesture-kicker {
+  color: var(--fg-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gesture-value strong {
+  color: var(--tracking);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.gesture-value strong.idle {
+  color: var(--fg-dim);
+}
+
+.property-row,
+.object-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.property-row strong {
+  color: var(--tracking);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.object-status {
+  justify-content: flex-start;
+  color: var(--fg);
+}
+
+.object-status-dot {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--fg-muted);
+  border-radius: 50%;
+}
+
+.object-status-dot.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.hint {
+  margin: 10px 0 0 18px;
+  color: var(--fg-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.selected-name {
+  margin-top: 11px;
+  padding: 7px 8px;
+  border-left: 2px solid var(--accent);
+  color: var(--fg);
+  background: var(--panel);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+}
+
+.bottom-panel {
+  right: 258px;
+  bottom: 0;
+  left: 68px;
+  min-height: 31px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 4px 10px;
+  border-width: 1px 0 0;
+}
+
+.bottom-heading {
+  flex: 0 0 auto;
+}
+
+.legend {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.legend::-webkit-scrollbar {
+  display: none;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.legend-gesture {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.legend-hint {
+  color: var(--fg-muted);
+}
+
+.webcam-wrap {
+  right: 270px;
+  bottom: 45px;
+  width: 254px;
+  padding: 0;
+  border-color: #454545;
+}
+
+.webcam-wrap.is-hidden {
+  display: none;
+}
+
+.webcam-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 27px;
+  padding: 0 8px;
+  color: var(--fg-dim);
+  background: var(--panel-raised);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.camera-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--tracking);
+  font-size: 8px;
+}
+
+.webcam-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #0b0b0b;
+}
+
+.webcam-wrap video,
+.webcam-wrap canvas.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.webcam-wrap canvas.overlay {
+  pointer-events: none;
+}
+
+.fullscreen-msg {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(18, 18, 18, 0.96);
+  text-align: center;
+}
+
+.fullscreen-msg h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.fullscreen-msg p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tool {
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  color: var(--fg);
+  background: var(--panel-raised);
+  padding: 7px 11px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tool:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .properties-panel {
+    width: 220px;
+  }
+
+  .webcam-wrap {
+    right: 232px;
+  }
+
+  .bottom-panel {
+    right: 220px;
+  }
+
+  .menu {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand {
+    min-width: auto;
+  }
+
+  .brand > div {
+    display: none;
+  }
+
+  .topbar-status > span:not(.status-dot) {
+    display: none;
+  }
+
+  .tool-shelf {
+    bottom: 66px;
+    width: 58px;
+  }
+
+  .properties-panel {
+    top: auto;
+    right: 0;
+    bottom: 31px;
+    left: 58px;
+    width: auto;
+    height: 35px;
+    overflow: hidden;
+  }
+
+  .properties-panel .panel-heading,
+  .properties-panel .property-section {
+    display: none;
+  }
+
+  .properties-panel::after {
+    content: 'Gesture input  ·  ';
+    display: block;
+    padding: 10px 12px;
+    color: var(--fg-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .bottom-panel {
+    right: 0;
+    bottom: 0;
+    left: 58px;
+    min-height: 31px;
+  }
+
+  .bottom-heading {
+    display: none;
+  }
+
+  .webcam-wrap {
+    right: 10px;
+    bottom: 80px;
+    width: min(220px, calc(100vw - 80px));
+  }
+}

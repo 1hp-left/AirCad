@@ -1,0 +1,72 @@
+- generic [ref=e3]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: A
+      - generic [ref=e8]:
+        - heading "AirCad" [level=1] [ref=e9]
+        - generic [ref=e10]: Gesture 3D Modeling
+    - navigation "Application menu" [ref=e11]:
+      - button "Scene" [ref=e12] [cursor=pointer]
+      - button "Gesture" [ref=e13] [cursor=pointer]
+      - button "View" [ref=e14] [cursor=pointer]
+    - generic [ref=e15]:
+      - generic [ref=e17]: requesting camera…
+      - button "Camera" [pressed] [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]: ◉
+        - text: Camera
+  - complementary "Tools" [ref=e20]:
+    - button "Box" [ref=e22] [cursor=pointer]
+    - button "Select" [active] [ref=e25] [cursor=pointer]:
+      - generic [ref=e26]: ⌖
+    - button "Move" [ref=e28] [cursor=pointer]:
+      - generic [ref=e29]: ✥
+    - generic [ref=e32]: Export
+    - button "STL" [disabled] [ref=e33] [cursor=pointer]
+    - button "OBJ" [disabled] [ref=e34] [cursor=pointer]
+    - button "GLTF" [disabled] [ref=e35] [cursor=pointer]
+  - complementary "Gesture and scene properties" [ref=e36]:
+    - generic [ref=e37]:
+      - generic [ref=e38]: Properties
+      - generic [ref=e39]: ⋮
+    - generic [ref=e40]:
+      - generic [ref=e41]: Gesture input
+      - generic [ref=e42]:
+        - generic [ref=e43]: Waiting
+        - strong [ref=e44]: No gesture
+      - generic [ref=e45]:
+        - generic [ref=e46]: Tracking
+        - strong [ref=e47]: requesting camera…
+    - generic [ref=e48]:
+      - generic [ref=e49]: Active object
+      - strong [ref=e52]: No object selected
+      - paragraph [ref=e53]: Click the box, or point at it with your index finger to select it.
+  - region "Gesture reference" [ref=e54]:
+    - generic [ref=e56]:
+      - generic [ref=e57]:
+        - generic [ref=e58]: Select
+        - generic [ref=e59]: point at an object
+      - generic [ref=e60]:
+        - generic [ref=e61]: Create
+        - generic [ref=e62]: spawn the current primitive
+      - generic [ref=e63]:
+        - generic [ref=e64]: Move
+        - generic [ref=e65]: grab & drag a held object
+      - generic [ref=e66]:
+        - generic [ref=e67]: Rotate
+        - generic [ref=e68]: palm angle → object rotation
+      - generic [ref=e69]:
+        - generic [ref=e70]: Resize
+        - generic [ref=e71]: thumb–index distance → size
+      - generic [ref=e72]:
+        - generic [ref=e73]: Shape
+        - generic [ref=e74]: stretch / squash along palm
+      - generic [ref=e75]:
+        - generic [ref=e76]: Delete
+        - generic [ref=e77]: remove the selected object
+      - generic [ref=e78]:
+        - generic [ref=e79]: Combine
+        - generic [ref=e80]: two fists grab two objects
+  - region "Camera preview" [ref=e81]:
+    - generic [ref=e82]:
+      - generic [ref=e83]: Camera preview
+      - generic [ref=e84]: LIVE
