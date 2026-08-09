@@ -34,7 +34,7 @@ export class GestureCursor {
     this.group.renderOrder = 1000;
 
     this.beamMaterial = new THREE.MeshBasicMaterial({
-      color: 0x4fd1c5,
+      color: 0xa8bd68,
       transparent: true,
       opacity: 0.72,
       depthTest: false,
@@ -47,7 +47,7 @@ export class GestureCursor {
     this.beam.renderOrder = 1000;
 
     this.reticleMaterial = new THREE.MeshBasicMaterial({
-      color: 0x4fd1c5,
+      color: 0xa8bd68,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.95,
@@ -85,7 +85,7 @@ export class GestureCursor {
     this.beam.scale.set(1, length, 1);
     this.beam.quaternion.setFromUnitVectors(this.yAxis, direction);
 
-    const color = hit ? 0x4fd1c5 : 0xf6ad55;
+    const color = hit ? 0xa8bd68 : 0x9aa6b5;
     this.beamMaterial.color.setHex(color);
     this.reticleMaterial.color.setHex(color);
 

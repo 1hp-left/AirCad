@@ -77,6 +77,7 @@ export class MouseController {
       isMoving: this.moveAction.isActive || activeTransform !== null,
       shapeAxis: activeTransform === 'shape' ? this.shapeAction.axisLabel : null,
       input: this.moveAction.isActive || activeTransform ? 'mouse' : null,
+      notice: null,
     };
   }
 
@@ -241,7 +242,7 @@ export class MouseController {
       ...snapshot,
       action: snapshot.isMoving ? (this.activeTransform ?? 'move') : action,
     } satisfies SceneControllerSnapshot;
-    const key = `${next.action}:${next.selectedName ?? ''}:${next.isMoving}:${next.shapeAxis ?? ''}:${next.input ?? ''}`;
+    const key = `${next.action}:${next.selectedName ?? ''}:${next.isMoving}:${next.shapeAxis ?? ''}:${next.input ?? ''}:${next.notice ?? ''}`;
     if (key === this.lastSnapshotKey) return;
     this.lastSnapshotKey = key;
     this.listeners.forEach((listener) => listener(next));

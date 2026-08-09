@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isPrimitiveType, PRIMITIVE_LABELS } from './primitives';
 
 /**
  * Owns selectable modeling objects and the current selection decoration.
@@ -9,6 +10,7 @@ import * as THREE from 'three';
 export class ObjectStore {
   private selectedObject: THREE.Object3D | null = null;
   private selectionOutline: THREE.BoxHelper | null = null;
+  private readonly nameCounts = new Map<string, number>();
 
   constructor(readonly group: THREE.Group) {
     group.name = group.name || 'objects';
@@ -21,8 +23,23 @@ export class ObjectStore {
   /** Add a modeling object and mark it as eligible for gesture selection. */
   add<T extends THREE.Object3D>(object: T): T {
     object.userData.aircadSelectable = true;
+    if (!object.name) object.name = this.nextObjectName(object);
     this.group.add(object);
     return object;
+  }
+
+  /** Remove a modeling root and release all geometry/material resources it owns. */
+  remove(object: THREE.Object3D): string | null {
+    if (object.parent !== this.group || object.userData.aircadSelectable === false) return null;
+    const name = object.name || 'Object';
+    if (object === this.selectedObject) this.clearSelection();
+    this.group.remove(object);
+    disposeObjectResources(object);
+    return name;
+  }
+
+  deleteSelected(): string | null {
+    return this.selectedObject ? this.remove(this.selectedObject) : null;
   }
 
   select(object: THREE.Object3D | null): void {
@@ -39,7 +56,7 @@ export class ObjectStore {
     this.selectedObject = object;
 
     if (object) {
-      this.selectionOutline = new THREE.BoxHelper(object, 0x4fd1c5);
+      this.selectionOutline = new THREE.BoxHelper(object, 0x7c9fe8);
       this.selectionOutline.name = '__aircad-selection-outline';
       this.selectionOutline.userData.aircadSelectable = false;
       this.group.add(this.selectionOutline);
@@ -70,4 +87,22 @@ export class ObjectStore {
     else material.dispose();
     this.selectionOutline = null;
   }
+
+  private nextObjectName(object: THREE.Object3D): string {
+    const primitive = object.userData.aircadPrimitive;
+    const baseName = isPrimitiveType(primitive) ? PRIMITIVE_LABELS[primitive] : 'Object';
+    const nextCount = (this.nameCounts.get(baseName) ?? 0) + 1;
+    this.nameCounts.set(baseName, nextCount);
+    return `${baseName} ${nextCount}`;
+  }
+}
+
+function disposeObjectResources(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    mesh.geometry?.dispose();
+    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(material)) material.forEach((item) => item.dispose());
+    else material?.dispose();
+  });
 }

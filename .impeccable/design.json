@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-09T14:24:02.2937313-04:00",
+  "title": "Design System: AirCad",
+  "extensions": {
+    "colorMeta": {
+      "workbench": {
+        "role": "neutral",
+        "displayName": "Graphite Workbench",
+        "canonical": "#181818",
+        "tonalRamp": ["#151515", "#242424", "#343434", "#474747", "#5f5f5f", "#7d7d7d", "#aaaaaa", "#e8e8e8"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas Graphite",
+        "canonical": "#252525",
+        "tonalRamp": ["#151515", "#252525", "#353535", "#484848", "#606060", "#7e7e7e", "#ababab", "#e9e9e9"]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel Graphite",
+        "canonical": "#242424",
+        "tonalRamp": ["#151515", "#242424", "#343434", "#474747", "#5f5f5f", "#7d7d7d", "#aaaaaa", "#e8e8e8"]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised Graphite",
+        "canonical": "#2d2d2d",
+        "tonalRamp": ["#171717", "#282828", "#393939", "#4d4d4d", "#656565", "#838383", "#afafaf", "#ebebeb"]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Soft Divider",
+        "canonical": "#3b3b3b",
+        "tonalRamp": ["#181818", "#2a2a2a", "#3b3b3b", "#4f4f4f", "#686868", "#858585", "#b0b0b0", "#ececec"]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Primary Text",
+        "canonical": "#e2e2e2",
+        "tonalRamp": ["#1b1b1b", "#303030", "#484848", "#636363", "#838383", "#a7a7a7", "#cccccc", "#f2f2f2"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Text",
+        "canonical": "#b0b0b0",
+        "tonalRamp": ["#1b1b1b", "#303030", "#484848", "#626262", "#838383", "#b0b0b0", "#d0d0d0", "#f1f1f1"]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "canonical": "#949494",
+        "tonalRamp": ["#1b1b1b", "#303030", "#484848", "#606060", "#777777", "#949494", "#bdbdbd", "#ececec"]
+      },
+      "camera-well": {
+        "role": "neutral",
+        "displayName": "Camera Well",
+        "canonical": "#0b0b0b",
+        "tonalRamp": ["#0b0b0b", "#1b1b1b", "#2d2d2d", "#424242", "#5c5c5c", "#7b7b7b", "#a8a8a8", "#e7e7e7"]
+      },
+      "panel-shadow": {
+        "role": "neutral",
+        "displayName": "Panel Shadow",
+        "canonical": "rgba(0, 0, 0, 0.28)"
+      },
+      "active": {
+        "role": "primary",
+        "displayName": "Active Blue",
+        "canonical": "#7c9fe8",
+        "tonalRamp": ["#17213a", "#25345a", "#354a7c", "#4c67a4", "#6786ca", "#89a9e8", "#b7cbf3", "#e7eeff"]
+      },
+      "tracking": {
+        "role": "secondary",
+        "displayName": "Live Tracking Green",
+        "canonical": "#a8bd68",
+        "tonalRamp": ["#222914", "#35411f", "#4d5d2d", "#687d3e", "#859d52", "#a8bd68", "#ccd99c", "#edf2d8"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Destructive Red",
+        "canonical": "#cf6a61",
+        "tonalRamp": ["#321716", "#512321", "#73312d", "#98423d", "#bd554d", "#d7766e", "#e7a49f", "#f7dcd9"]
+      },
+      "model-neutral": {
+        "role": "neutral",
+        "displayName": "Model Neutral",
+        "canonical": "#9aa6b5",
+        "tonalRamp": ["#1f252d", "#303943", "#45515f", "#5d6b7b", "#768698", "#9aa6b5", "#c1c9d2", "#edf0f4"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Live Headline", "purpose": "Recognized gesture names and transient action state." },
+      "title": { "displayName": "Editor Title", "purpose": "The AirCad wordmark and compact panel titles." },
+      "supporting": { "displayName": "Supporting Copy", "purpose": "Concise secondary copy in blocking states." },
+      "body": { "displayName": "UI Body", "purpose": "Instructions, properties, and status copy." },
+      "control": { "displayName": "Desktop Control", "purpose": "Conventional buttons and inputs." },
+      "label": { "displayName": "System Label", "purpose": "Sentence-case section labels and short metadata." },
+      "mono": { "displayName": "Object Identifier", "purpose": "Selected object names and measurement-like identifiers only." },
+      "directional": { "displayName": "Directional Glyph", "purpose": "Arrow guidance inside the gesture coach." },
+      "message": { "displayName": "Blocking Message", "purpose": "Camera permission and device-state headings." }
+    },
+    "shadows": [
+      {
+        "name": "panel-separation",
+        "value": "0 2px 6px rgba(0, 0, 0, 0.28)",
+        "purpose": "Separates fixed chrome and floating feedback from the 3D scene."
+      }
+    ],
+    "breakpoints": [
+      { "name": "compact-desktop", "value": "900px" },
+      { "name": "narrow", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Shelf Tool",
+      "kind": "button",
+      "refersTo": "shelf-tool",
+      "description": "Compact inactive tool or primitive choice in the left shelf.",
+      "html": "<button class=\"ds-shelf-tool\"><span class=\"ds-tool-glyph\" aria-hidden=\"true\"></span><span>Sphere</span></button>",
+      "css": ".ds-shelf-tool { display:flex; width:62px; min-height:43px; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:5px 2px; border:1px solid transparent; border-radius:2px; color:var(--fg-dim, #b0b0b0); background:transparent; font:600 10px/1.2 'Segoe UI', sans-serif; cursor:pointer; } .ds-tool-glyph { width:17px; height:17px; border:1px solid currentColor; border-radius:50%; } .ds-shelf-tool:hover { color:var(--fg, #e2e2e2); background:var(--panel-hover, #383838); } .ds-shelf-tool:focus-visible { outline:2px solid var(--accent, #7c9fe8); outline-offset:-2px; }"
+    },
+    {
+      "name": "Active Shelf Tool",
+      "kind": "button",
+      "refersTo": "shelf-tool-active",
+      "description": "The currently selected primitive or tool.",
+      "html": "<button class=\"ds-shelf-tool-active\" aria-pressed=\"true\"><span class=\"ds-tool-glyph-active\" aria-hidden=\"true\"></span><span>Box</span></button>",
+      "css": ".ds-shelf-tool-active { display:flex; width:62px; min-height:43px; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:5px 2px; border:1px solid var(--accent-border, #4f6697); border-radius:2px; color:var(--accent, #7c9fe8); background:var(--accent-soft, rgba(124,159,232,.16)); font:600 10px/1.2 'Segoe UI', sans-serif; cursor:pointer; } .ds-tool-glyph-active { width:17px; height:17px; border:1px solid currentColor; transform:rotate(30deg) skewY(-12deg) scale(.8); } .ds-shelf-tool-active:focus-visible { outline:2px solid var(--accent, #7c9fe8); outline-offset:-2px; }"
+    },
+    {
+      "name": "Camera Toggle",
+      "kind": "button",
+      "refersTo": "camera-toggle",
+      "description": "Neutral top-bar action for showing or hiding the mirrored camera preview.",
+      "html": "<button class=\"ds-camera-toggle\" aria-pressed=\"true\">Hide camera</button>",
+      "css": ".ds-camera-toggle { display:inline-flex; align-items:center; height:28px; padding:0 9px; border:0; border-radius:2px; color:var(--fg-dim, #b0b0b0); background:transparent; font:400 11px/1.2 'Segoe UI', sans-serif; cursor:pointer; } .ds-camera-toggle:hover { color:var(--fg, #e2e2e2); background:var(--panel-hover, #383838); } .ds-camera-toggle:focus-visible { outline:2px solid var(--accent, #7c9fe8); outline-offset:-2px; }"
+    },
+    {
+      "name": "Property Field",
+      "kind": "card",
+      "refersTo": "property-field",
+      "description": "A flat, bordered readout inside the properties panel.",
+      "html": "<div class=\"ds-property-field\"><span>Next object</span><strong>Sphere</strong></div>",
+      "css": ".ds-property-field { display:flex; width:220px; flex-direction:column; gap:3px; padding:9px 10px; border:1px solid var(--line-soft, #3b3b3b); color:var(--fg, #e2e2e2); background:var(--panel, #242424); font-family:'Segoe UI', sans-serif; } .ds-property-field span { color:var(--fg-muted, #949494); font-size:10px; font-weight:600; } .ds-property-field strong { color:var(--fg, #e2e2e2); font-size:12px; font-weight:600; }"
+    },
+    {
+      "name": "Gesture Coach",
+      "kind": "custom",
+      "refersTo": "control-coach",
+      "description": "Transient directional guidance shown while a continuous gesture action is locked.",
+      "html": "<section class=\"ds-gesture-coach\"><strong>Rotation locked</strong><p><b>← →</b> Move sideways to spin</p><small>Open your palm or lower your hand to finish</small></section>",
+      "css": ".ds-gesture-coach { width:360px; padding:10px 12px 9px; border:1px solid #4d4d4d; border-radius:3px; color:var(--fg, #e2e2e2); background:rgba(24,24,24,.94); box-shadow:0 2px 6px rgba(0,0,0,.28); font-family:'Segoe UI', sans-serif; } .ds-gesture-coach strong { color:var(--tracking, #a8bd68); font-size:11px; } .ds-gesture-coach p { margin:7px 0; font-size:11px; } .ds-gesture-coach b { margin-right:6px; color:var(--accent, #7c9fe8); font-size:15px; } .ds-gesture-coach small { color:var(--fg-dim, #b0b0b0); font-size:10px; }"
+    },
+    {
+      "name": "Selected Object Label",
+      "kind": "custom",
+      "refersTo": "selected-label",
+      "description": "Stable identifier for the currently selected scene object.",
+      "html": "<div class=\"ds-selected-label\">Box 2</div>",
+      "css": ".ds-selected-label { width:220px; padding:7px 8px; border:1px solid var(--line-soft, #3b3b3b); color:var(--fg, #e2e2e2); background:var(--panel, #242424); font:400 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clear Modeling Workshop",
+    "overview": "AirCad should feel like a modern, simplified 3D modeling application: professional enough to trust, compact enough to keep the scene dominant, and clearer than a traditional expert-first CAD interface. The graphite workspace provides continuity around the canvas while concise labels and visible state changes make gesture control easier to learn.\n\nThe interface is technical and restrained rather than playful, glossy, or decorative. Color is functional: it distinguishes an active tool, live hand tracking, and a destructive result. Dense desktop chrome is acceptable because the controls are grouped by task and leave most of the screen to the model.",
+    "keyCharacteristics": [
+      "Graphite surfaces frame a full-window 3D canvas.",
+      "Compact, fixed editor regions create a stable spatial map.",
+      "Muted color communicates state rather than personality for its own sake.",
+      "Compact type, thin borders, and nearly square controls reinforce desktop-tool precision.",
+      "Gesture instructions use direct physical language and remain close to live state."
+    ],
+    "rules": [
+      { "name": "The Functional Color Rule", "body": "Blue means active or selected, yellow-green means live tracking, and red means destructive; none of these colors is general decoration.", "section": "colors" },
+      { "name": "The One Signal Rule", "body": "A compact control should normally show one signal color at a time so status remains unambiguous.", "section": "colors" },
+      { "name": "The Application Chrome Rule", "body": "Type stays compact because the canvas is primary. Use sentence case, plain wording, and hierarchy from size or weight instead of miniature uppercase labels.", "section": "typography" },
+      { "name": "The Structural Depth Rule", "body": "Use tone and a one-pixel boundary first; add the panel shadow only when a region floats above the 3D scene.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the 3D canvas visually dominant and place help near the action it explains.",
+      "Do use active blue, tracking green, and destructive red only for their assigned states.",
+      "Do preserve dense, stable editor regions so controls do not move between modeling actions.",
+      "Do pair color with labels, outlines, position, or icons.",
+      "Do use sentence case for labels and state copy.",
+      "Do use direct instructions such as ‘move sideways to spin’ and ‘relax your hand before creating another.’"
+    ],
+    "donts": [
+      "Don't return to a saturated orange-and-teal pairing or use gradients, neon glow, and glass effects that make the workspace resemble a generic AI dashboard.",
+      "Don't place every property inside a rounded card; section boundaries already provide the structure.",
+      "Don't use monospace for ordinary instructions or navigation.",
+      "Don't add decorative color to inactive controls or neutral scene geometry.",
+      "Don't let tool chrome occupy more space than the scene needs for manipulation.",
+      "Don't add generic live dots, miniature all-caps subtitles, fake menu entries, or disabled future-feature placeholders."
+    ]
+  }
+}

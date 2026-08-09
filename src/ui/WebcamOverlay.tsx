@@ -41,7 +41,7 @@ const CONNECTIONS: Array<[number, number]> = [
   [LANDMARK.RING_MCP, LANDMARK.PINKY_MCP],
 ];
 
-const COLORS = ['#4fd1c5', '#f6ad55']; // hand 0 / hand 1
+const COLORS = ['#a8bd68', '#7c9fe8']; // hand 0 / hand 1
 
 export function WebcamOverlay({ engine }: { engine: GestureEngine | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GestureCursor } from './GestureCursor';
 import { ObjectStore } from './ObjectStore';
+import { createPrimitive } from './primitives';
 
 /**
  * Owns the Three.js scene, camera, renderer, lights, ground grid, and the
@@ -152,20 +153,10 @@ export class SceneManager {
     this.scene.add(axes);
   }
 
-  /** Drop a test box so the viewport isn't empty before M2. */
-  addTestBox(): void {
-    const box = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 1.4, 1.4),
-      new THREE.MeshStandardMaterial({
-        color: 0x4fd1c5,
-        roughness: 0.4,
-        metalness: 0.15,
-      }),
-    );
+  /** Start with one editable object so first-run gesture controls are testable. */
+  addStarterObject(): void {
+    const box = createPrimitive('box');
     box.position.set(0, 0.7, 0);
-    box.castShadow = true;
-    box.receiveShadow = true;
-    box.name = 'test-box';
     this.objectStore.add(box);
   }
 

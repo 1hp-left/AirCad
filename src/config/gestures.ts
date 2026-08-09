@@ -43,8 +43,8 @@ export const GESTURE_CONFIG: Record<string, GestureConfig> = {
   [Gesture.THUMB_UP]: { action: 'scale', label: 'Resize', hint: 'thumb–index distance → size' },
   [Gesture.I_LOVE_YOU]: shape,
   [Gesture.L_SHAPE]: shape,
-  [Gesture.OPEN_PALM]: { action: 'create', label: 'Create', hint: 'spawn the current primitive' },
-  [Gesture.THUMB_DOWN]: { action: 'delete', label: 'Delete', hint: 'remove the selected object' },
+  [Gesture.OPEN_PALM]: { action: 'create', label: 'Create', hint: 'hold briefly; release between objects' },
+  [Gesture.THUMB_DOWN]: { action: 'delete', label: 'Delete', hint: 'hold briefly on the selected object' },
   [Gesture.PINCH]: { action: 'scale', label: 'Resize', hint: 'pinch → size' },
   [Gesture.EXPORT]: { action: 'export', label: 'Export', hint: 'export selected format' },
 };

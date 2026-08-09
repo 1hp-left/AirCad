@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { labelFor } from './config/gestures';
 import { useGestureEngine } from './hooks/useGestureEngine';
 import { useWebcam, type WebcamStatus } from './hooks/useWebcam';
+import type { GestureEngineStatus } from './gesture/types';
 import { GestureLegend } from './ui/GestureLegend';
 import { WebcamOverlay } from './ui/WebcamOverlay';
 import { MouseController } from './three/MouseController';
+import {
+  PRIMITIVE_LABELS,
+  PRIMITIVE_TYPES,
+  type PrimitiveType,
+} from './three/primitives';
 import { SceneController, type SceneControllerSnapshot } from './three/SceneController';
 import { SceneManager } from './three/SceneManager';
 
@@ -14,6 +20,7 @@ const EMPTY_SCENE_SNAPSHOT: SceneControllerSnapshot = {
   isMoving: false,
   shapeAxis: null,
   input: null,
+  notice: null,
 };
 
 /**
@@ -30,7 +37,7 @@ export default function App() {
   const gestureSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
   const mouseSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
   const [cameraPreviewVisible, setCameraPreviewVisible] = useState(true);
-  const [activeTool, setActiveTool] = useState<'box' | 'select' | 'move'>('select');
+  const [primitiveType, setPrimitiveType] = useState<PrimitiveType>('box');
   const [sceneSnapshot, setSceneSnapshot] = useState<SceneControllerSnapshot>(
     gestureSnapshotRef.current,
   );
@@ -45,7 +52,7 @@ export default function App() {
     const manager = new SceneManager(canvasRef.current);
     const mouseController = new MouseController(manager);
     managerRef.current = manager;
-    manager.addTestBox();
+    manager.addStarterObject();
     manager.start();
 
     const unsubscribeMouse = mouseController.on((snapshot) => {
@@ -74,7 +81,7 @@ export default function App() {
     const engine = engineRef.current;
     if (gestureStatus !== 'running' || !manager || !engine) return;
 
-    const controller = new SceneController(manager, engine);
+    const controller = new SceneController(manager, engine, primitiveType);
     controllerRef.current = controller;
     const unsubscribe = controller.on((snapshot) => {
       gestureSnapshotRef.current = snapshot;
@@ -88,9 +95,19 @@ export default function App() {
     };
   }, [gestureStatus]);
 
-  const actionHint = getActionHint(sceneSnapshot);
+  useEffect(() => {
+    controllerRef.current?.setPrimitiveType(primitiveType);
+  }, [primitiveType]);
+
+  const actionHint = getActionHint(sceneSnapshot, primitiveType);
   const sceneStatus = getSceneStatus(sceneSnapshot);
-  const gestureControlActive = sceneSnapshot.isMoving && sceneSnapshot.input === 'gesture';
+  const gestureDisplay = getGestureDisplay(
+    gestureStatus,
+    camStatus,
+    currentGesture,
+    numHands,
+    sceneSnapshot,
+  );
   const cameraAvailable = camStatus === 'ready' || camStatus === 'requesting';
   const blocked = camStatus === 'denied' || camStatus === 'no-device' || camStatus === 'error';
 
@@ -100,103 +117,72 @@ export default function App() {
 
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">A</span>
-          <div>
-            <h1>AirCad</h1>
-            <span>Gesture 3D Modeling</span>
-          </div>
+          <h1>AirCad</h1>
         </div>
-        <nav className="menu" aria-label="Application menu">
-          <button type="button">Scene</button>
-          <button type="button">Gesture</button>
-          <button type="button">View</button>
-        </nav>
-        <div className="topbar-status">
-          <span className={`status-dot ${gestureStatus === 'running' ? 'live' : ''}`} />
-          <span>{engineStatusLabel(gestureStatus, camStatus)}</span>
+        <div className="topbar-actions">
           <button
             type="button"
-            className={`camera-toggle ${cameraPreviewVisible ? 'active' : ''}`}
+            className="camera-toggle"
             aria-pressed={cameraPreviewVisible}
             title={cameraPreviewVisible ? 'Hide camera preview' : 'Show camera preview'}
             onClick={() => setCameraPreviewVisible((visible) => !visible)}
           >
-            <span className="camera-icon" aria-hidden="true">◉</span>
-            Camera
+            {cameraPreviewVisible ? 'Hide camera' : 'Show camera'}
           </button>
         </div>
       </header>
 
-      <aside className="tool-shelf" aria-label="Tools">
-        <div className="shelf-section-label">Tools</div>
-        <button
-          type="button"
-          className={`shelf-tool ${activeTool === 'box' ? 'active' : ''}`}
-          title="Box primitive"
-          onClick={() => setActiveTool('box')}
-        >
-          <span className="tool-glyph cube" aria-hidden="true" />
-          <span>Box</span>
-        </button>
-        <button
-          type="button"
-          className={`shelf-tool ${activeTool === 'select' ? 'active' : ''}`}
-          title="Select tool"
-          onClick={() => setActiveTool('select')}
-        >
-          <span className="tool-glyph pointer" aria-hidden="true">⌖</span>
-          <span>Select</span>
-        </button>
-        <button
-          type="button"
-          className={`shelf-tool ${activeTool === 'move' ? 'active' : ''}`}
-          title="Move tool"
-          onClick={() => setActiveTool('move')}
-        >
-          <span className="tool-glyph move" aria-hidden="true">✥</span>
-          <span>Move</span>
-        </button>
-        <div className="shelf-divider" />
-        <div className="shelf-section-label">Export</div>
-        <button type="button" className="shelf-tool compact" disabled>STL</button>
-        <button type="button" className="shelf-tool compact" disabled>OBJ</button>
-        <button type="button" className="shelf-tool compact" disabled>GLTF</button>
+      <aside className="tool-shelf" aria-label="Primitive picker">
+        <div className="shelf-section-label">Create</div>
+        {PRIMITIVE_TYPES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            className={`shelf-tool ${primitiveType === type ? 'active' : ''}`}
+            aria-pressed={primitiveType === type}
+            title={`${PRIMITIVE_LABELS[type]} primitive — hold an open palm to create`}
+            onClick={() => setPrimitiveType(type)}
+          >
+            <span className={`tool-glyph primitive-${type}`} aria-hidden="true" />
+            <span>{PRIMITIVE_LABELS[type]}</span>
+          </button>
+        ))}
       </aside>
 
       <aside className="properties-panel" aria-label="Gesture and scene properties">
         <div className="panel-heading">
           <span>Properties</span>
-          <span className="panel-menu" aria-hidden="true">⋮</span>
         </div>
 
         <section className="property-section gesture-section">
-          <div className="section-heading">Gesture input</div>
+          <div className="section-heading">Hand controls</div>
           <div className="gesture-value">
-            <span className="gesture-kicker">
-              {gestureControlActive
-                ? 'Landmark control locked'
-                : numHands > 0
-                  ? `${numHands} hand${numHands > 1 ? 's' : ''}`
-                  : 'Waiting'}
-            </span>
-            <strong className={!gestureControlActive && currentGesture === 'None' ? 'idle' : ''}>
-              {gestureControlActive
-                ? controlTitle(sceneSnapshot)
-                : currentGesture === 'None'
-                  ? 'No gesture'
-                  : labelFor(currentGesture)}
-            </strong>
-          </div>
-          <div className="property-row">
-            <span>Tracking</span>
-            <strong>{engineStatusLabel(gestureStatus, camStatus)}</strong>
+            <strong className={gestureDisplay.idle ? 'idle' : ''}>{gestureDisplay.label}</strong>
+            <span className="gesture-detail">{gestureDisplay.detail}</span>
           </div>
         </section>
 
         <section className="property-section">
-          <div className="section-heading">Active object</div>
-          <div className="object-status">
-            <span className={`object-status-dot ${sceneSnapshot.selectedName ? 'selected' : ''}`} />
+          <div className="section-heading">Create</div>
+          <div className="primitive-value">
+            <span className={`tool-glyph primitive-${primitiveType}`} aria-hidden="true" />
+            <div>
+              <span>Next object</span>
+              <strong>{PRIMITIVE_LABELS[primitiveType]}</strong>
+            </div>
+          </div>
+          <p className="hint primitive-hint">
+            Hold an open palm to create one at your hand. Relax your hand before creating another.
+          </p>
+        </section>
+
+        <section className="property-section">
+          <div className="section-heading">Selection</div>
+          <div
+            className={`object-status ${sceneSnapshot.notice ? `command-${sceneSnapshot.action}` : ''}`}
+            role="status"
+            aria-live="polite"
+          >
             <strong>{sceneStatus}</strong>
           </div>
           <p className="hint">{actionHint}</p>
@@ -211,7 +197,7 @@ export default function App() {
       )}
 
       <section className="bottom-panel" aria-label="Gesture reference">
-        <div className="bottom-heading">Gesture reference</div>
+        <div className="bottom-heading">Gestures</div>
         <GestureLegend />
       </section>
 
@@ -222,8 +208,7 @@ export default function App() {
           aria-hidden={!cameraPreviewVisible}
         >
           <div className="webcam-header">
-            <span>Camera preview</span>
-            <span className="camera-live"><span className="status-dot live" /> LIVE</span>
+            <span>Camera</span>
           </div>
           <div className="webcam-frame">
             <video ref={videoRef} playsInline muted />
@@ -237,7 +222,7 @@ export default function App() {
   );
 }
 
-function getActionHint(snapshot: SceneControllerSnapshot): string {
+function getActionHint(snapshot: SceneControllerSnapshot, primitiveType: PrimitiveType): string {
   const gestureActive = snapshot.isMoving && snapshot.input === 'gesture';
   const mouseActive = snapshot.isMoving && snapshot.input === 'mouse';
   switch (snapshot.action) {
@@ -261,6 +246,16 @@ function getActionHint(snapshot: SceneControllerSnapshot): string {
       return gestureActive
         ? 'Move your hand to place the object. Move closer or farther to change depth.'
         : 'Close your fist to grab, or drag the object with the mouse.';
+    case 'create':
+      return snapshot.notice
+        ? 'Open Palm recognized. Relax your hand before creating another object.'
+        : `Hold an open palm to create a ${PRIMITIVE_LABELS[primitiveType]} at your hand.`;
+    case 'delete':
+      return snapshot.notice
+        ? 'Thumb Down recognized. Relax your hand before deleting another object.'
+        : snapshot.selectedName
+          ? 'Hold a Thumb Down to delete the selected object.'
+          : 'Point at an object to select it before deleting.';
     default:
       return snapshot.selectedName
         ? 'Click and drag, or close your fist to move it.'
@@ -269,6 +264,7 @@ function getActionHint(snapshot: SceneControllerSnapshot): string {
 }
 
 function getSceneStatus(snapshot: SceneControllerSnapshot): string {
+  if (snapshot.notice) return snapshot.notice;
   if (!snapshot.selectedName) return 'No object selected';
   if (!snapshot.isMoving) return 'Object selected';
   switch (snapshot.action) {
@@ -288,7 +284,6 @@ function ControlCoach({ snapshot }: { snapshot: SceneControllerSnapshot }) {
   return (
     <section className="control-coach" role="status" aria-live="polite">
       <div className="coach-heading">
-        <span className="status-dot live" aria-hidden="true" />
         <strong>{controlTitle(snapshot)}</strong>
       </div>
       <div className="coach-directions">
@@ -329,27 +324,53 @@ function controlTitle(snapshot: SceneControllerSnapshot): string {
   }
 }
 
-function engineStatusLabel(g: string, cam: WebcamStatus): string {
-  if (cam !== 'ready') return camStatusLabel(cam);
-  if (g === 'running') return 'engine live';
-  if (g === 'loading') return 'loading model…';
-  if (g === 'error') return 'engine error';
-  return 'engine idle';
+interface GestureDisplay {
+  label: string;
+  detail: string;
+  idle: boolean;
 }
 
-function camStatusLabel(s: WebcamStatus): string {
-  switch (s) {
-    case 'requesting':
-      return 'requesting camera…';
-    case 'denied':
-      return 'camera denied';
-    case 'no-device':
-      return 'no camera found';
-    case 'error':
-      return 'camera error';
-    default:
-      return 'camera idle';
+function getGestureDisplay(
+  gestureStatus: GestureEngineStatus,
+  camStatus: WebcamStatus,
+  currentGesture: string,
+  numHands: number,
+  snapshot: SceneControllerSnapshot,
+): GestureDisplay {
+  if (camStatus === 'requesting') {
+    return {
+      label: 'Connecting to camera',
+      detail: 'Allow access if your browser asks',
+      idle: true,
+    };
   }
+  if (camStatus !== 'ready') {
+    return { label: 'Camera unavailable', detail: 'Reload after fixing camera access', idle: true };
+  }
+  if (gestureStatus === 'loading' || gestureStatus === 'idle') {
+    return { label: 'Starting hand controls', detail: 'This usually takes a moment', idle: true };
+  }
+  if (gestureStatus === 'error' || gestureStatus === 'no-camera') {
+    return { label: 'Hand controls unavailable', detail: 'Reload to try again', idle: true };
+  }
+  if (snapshot.isMoving && snapshot.input === 'gesture') {
+    return {
+      label: controlTitle(snapshot),
+      detail: 'Move your hand to adjust the object',
+      idle: false,
+    };
+  }
+  if (numHands === 0) {
+    return { label: 'No hand detected', detail: 'Show one hand to begin', idle: true };
+  }
+  if (currentGesture === 'None') {
+    return { label: 'Hand detected', detail: 'Make a gesture to choose an action', idle: true };
+  }
+  return {
+    label: labelFor(currentGesture),
+    detail: `${numHands} hand${numHands > 1 ? 's' : ''} detected`,
+    idle: false,
+  };
 }
 
 function CameraBlocked({ status }: { status: WebcamStatus }) {
