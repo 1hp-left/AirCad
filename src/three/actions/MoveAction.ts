@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { normalizedHandSize, palmCenter } from '../../gesture/landmarkUtils';
+import { normalizedHandSize, pinchPoint } from '../../gesture/landmarkUtils';
 import type { HandResult } from '../../gesture/types';
 import { rayFromNormalizedPoint } from '../selection';
 import type { TransformAction } from './TransformAction';
@@ -8,7 +8,7 @@ const MIN_DEPTH = 2.5;
 const MAX_DEPTH = 24;
 const MIN_HAND_SIZE = 0.015;
 
-/** Stateful closed-fist grab that moves one selected object at a time. */
+/** Stateful direct pinch grab that moves one selected object at a time. */
 export class MoveAction implements TransformAction {
   private grabbedObject: THREE.Object3D | null = null;
   private readonly worldOffset = new THREE.Vector3();
@@ -24,10 +24,10 @@ export class MoveAction implements TransformAction {
     return this.grabbedObject !== null;
   }
 
-  /** Capture the object/ray relationship at the instant the fist closes. */
+  /** Capture the object/ray relationship at the instant the pinch closes. */
   start(object: THREE.Object3D, hand: HandResult, camera: THREE.Camera): void {
     this.reset();
-    const ray = rayFromNormalizedPoint(palmCenter(hand), camera, this.raycaster);
+    const ray = rayFromNormalizedPoint(pinchPoint(hand), camera, this.raycaster);
     this.capture(object, ray);
     this.baselineHandSize = Math.max(normalizedHandSize(hand), MIN_HAND_SIZE);
   }
@@ -41,7 +41,7 @@ export class MoveAction implements TransformAction {
       MAX_DEPTH,
     );
     this.updateAtDepth(
-      rayFromNormalizedPoint(palmCenter(hand), camera, this.raycaster),
+      rayFromNormalizedPoint(pinchPoint(hand), camera, this.raycaster),
       depth,
     );
   }

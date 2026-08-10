@@ -4,6 +4,14 @@ const BEAM_RADIUS = 0.012;
 const RING_INNER_RADIUS = 0.1;
 const RING_OUTER_RADIUS = 0.14;
 
+export interface GestureCursorOptions {
+  name?: string;
+  hitColor?: number;
+  missColor?: number;
+  showBeam?: boolean;
+  markerScale?: number;
+}
+
 /**
  * Visualizes the current pointing ray in the Three.js scene.
  *
@@ -26,10 +34,16 @@ export class GestureCursor {
   private readonly backward = new THREE.Vector3();
   private readonly yAxis = new THREE.Vector3(0, 1, 0);
   private readonly zAxis = new THREE.Vector3(0, 0, 1);
+  private readonly hitColor: number;
+  private readonly missColor: number;
+  private readonly markerScale: number;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, options: GestureCursorOptions = {}) {
+    this.hitColor = options.hitColor ?? 0xa8bd68;
+    this.missColor = options.missColor ?? 0x9aa6b5;
+    this.markerScale = options.markerScale ?? 1;
     this.group = new THREE.Group();
-    this.group.name = '__aircad-gesture-cursor';
+    this.group.name = options.name ?? '__aircad-gesture-cursor';
     this.group.visible = false;
     this.group.renderOrder = 1000;
 
@@ -44,6 +58,7 @@ export class GestureCursor {
       new THREE.CylinderGeometry(BEAM_RADIUS, BEAM_RADIUS, 1, 8, 1, true),
       this.beamMaterial,
     );
+    this.beam.visible = options.showBeam ?? true;
     this.beam.renderOrder = 1000;
 
     this.reticleMaterial = new THREE.MeshBasicMaterial({
@@ -70,6 +85,8 @@ export class GestureCursor {
     });
     this.center = new THREE.Mesh(new THREE.CircleGeometry(0.025, 20), this.centerMaterial);
     this.center.renderOrder = 1002;
+    this.reticle.scale.setScalar(this.markerScale);
+    this.center.scale.setScalar(this.markerScale);
 
     this.group.add(this.beam, this.reticle, this.center);
     scene.add(this.group);
@@ -85,7 +102,7 @@ export class GestureCursor {
     this.beam.scale.set(1, length, 1);
     this.beam.quaternion.setFromUnitVectors(this.yAxis, direction);
 
-    const color = hit ? 0xa8bd68 : 0x9aa6b5;
+    const color = hit ? this.hitColor : this.missColor;
     this.beamMaterial.color.setHex(color);
     this.reticleMaterial.color.setHex(color);
 

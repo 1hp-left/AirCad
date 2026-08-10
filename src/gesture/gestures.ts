@@ -15,8 +15,10 @@ export const Gesture = {
   VICTORY: 'Victory',
   I_LOVE_YOU: 'ILoveYou',
 
-  // --- Custom-trained gesture names (M7). Add as you train them. ---
+  // Derived directly from thumb/index landmarks with hysteresis.
   PINCH: 'Pinch',
+
+  // --- Custom-trained gesture names (M7). Add as you train them. ---
   L_SHAPE: 'L_Shape',
   EXPORT: 'Export',
 } as const;

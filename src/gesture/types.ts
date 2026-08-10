@@ -41,6 +41,10 @@ export interface HandResult {
   gesture: string;
   /** Confidence 0..1. */
   score: number;
+  /** Landmark-derived pinch state with hysteresis; independent of pose labels. */
+  pinching: boolean;
+  /** How close thumb and index are, normalized to 0..1 for visual feedback. */
+  pinchStrength: number;
   /** 21 normalized landmarks (x,y in [0,1], z relative depth). */
   landmarks: { x: number; y: number; z: number }[];
   /** 21 world-space landmarks (meters, origin at hand center). */

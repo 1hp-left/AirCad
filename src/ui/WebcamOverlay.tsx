@@ -101,5 +101,24 @@ function draw(
       ctx.arc(point.x * width, point.y * height, 2.5, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    if (hand.pinchStrength > 0.3) {
+      const thumb = hand.landmarks[LANDMARK.THUMB_TIP];
+      const index = hand.landmarks[LANDMARK.INDEX_TIP];
+      const centerX = ((thumb.x + index.x) / 2) * width;
+      const centerY = ((thumb.y + index.y) / 2) * height;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + hand.pinchStrength * 0.65;
+      ctx.strokeStyle = hand.pinching ? '#ffffff' : color;
+      ctx.lineWidth = hand.pinching ? 3 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(thumb.x * width, thumb.y * height);
+      ctx.lineTo(index.x * width, index.y * height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, hand.pinching ? 7 : 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   });
 }

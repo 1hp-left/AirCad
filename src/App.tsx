@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { labelFor } from './config/gestures';
 import { useGestureEngine } from './hooks/useGestureEngine';
 import { useWebcam, type WebcamStatus } from './hooks/useWebcam';
@@ -6,6 +6,11 @@ import type { GestureEngineStatus } from './gesture/types';
 import { GestureLegend } from './ui/GestureLegend';
 import { WebcamOverlay } from './ui/WebcamOverlay';
 import { MouseController } from './three/MouseController';
+import {
+  createExportFile,
+  downloadExportFile,
+  type ExportFormat,
+} from './three/exporter';
 import {
   PRIMITIVE_LABELS,
   PRIMITIVE_TYPES,
@@ -23,6 +28,16 @@ const EMPTY_SCENE_SNAPSHOT: SceneControllerSnapshot = {
   notice: null,
 };
 
+type ExportState =
+  | { status: 'idle'; message: '' }
+  | { status: 'working' | 'success' | 'error'; message: string };
+
+const EXPORT_LABELS: Record<ExportFormat, string> = {
+  stl: 'STL',
+  obj: 'OBJ',
+  glb: 'GLB',
+};
+
 /**
  * AirCad — gesture-controlled 3D modeling.
  *
@@ -36,8 +51,15 @@ export default function App() {
   const controllerRef = useRef<SceneController | null>(null);
   const gestureSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
   const mouseSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
+  const exportInFlightRef = useRef(false);
+  const deleteNoticeTimerRef = useRef<number | null>(null);
   const [cameraPreviewVisible, setCameraPreviewVisible] = useState(true);
   const [primitiveType, setPrimitiveType] = useState<PrimitiveType>('box');
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [exportState, setExportState] = useState<ExportState>({
+    status: 'idle',
+    message: '',
+  });
   const [sceneSnapshot, setSceneSnapshot] = useState<SceneControllerSnapshot>(
     gestureSnapshotRef.current,
   );
@@ -57,7 +79,14 @@ export default function App() {
 
     const unsubscribeMouse = mouseController.on((snapshot) => {
       mouseSnapshotRef.current = snapshot;
-      setSceneSnapshot(manager.mouseInteractionActive ? snapshot : gestureSnapshotRef.current);
+      if (snapshot.selectedName) {
+        setDeleteNotice(null);
+        if (deleteNoticeTimerRef.current !== null) {
+          window.clearTimeout(deleteNoticeTimerRef.current);
+          deleteNoticeTimerRef.current = null;
+        }
+      }
+      setSceneSnapshot(snapshot);
     });
 
     return () => {
@@ -85,6 +114,13 @@ export default function App() {
     controllerRef.current = controller;
     const unsubscribe = controller.on((snapshot) => {
       gestureSnapshotRef.current = snapshot;
+      if (snapshot.selectedName) {
+        setDeleteNotice(null);
+        if (deleteNoticeTimerRef.current !== null) {
+          window.clearTimeout(deleteNoticeTimerRef.current);
+          deleteNoticeTimerRef.current = null;
+        }
+      }
       setSceneSnapshot(manager.mouseInteractionActive ? mouseSnapshotRef.current : snapshot);
     });
 
@@ -99,8 +135,92 @@ export default function App() {
     controllerRef.current?.setPrimitiveType(primitiveType);
   }, [primitiveType]);
 
-  const actionHint = getActionHint(sceneSnapshot, primitiveType);
-  const sceneStatus = getSceneStatus(sceneSnapshot);
+  useEffect(() => () => {
+    if (deleteNoticeTimerRef.current !== null) {
+      window.clearTimeout(deleteNoticeTimerRef.current);
+    }
+  }, []);
+
+  const handleDeleteSelected = useCallback(() => {
+    const manager = managerRef.current;
+    if (
+      !manager ||
+      manager.mouseInteractionActive ||
+      sceneSnapshot.isMoving ||
+      sceneSnapshot.action === 'combine'
+    ) return;
+
+    const deletedName = manager.objectStore.deleteSelected();
+    if (!deletedName) return;
+
+    const nextSnapshot: SceneControllerSnapshot = {
+      action: 'delete',
+      selectedName: null,
+      isMoving: false,
+      shapeAxis: null,
+      input: null,
+      notice: null,
+    };
+    gestureSnapshotRef.current = nextSnapshot;
+    mouseSnapshotRef.current = nextSnapshot;
+    setSceneSnapshot(nextSnapshot);
+    setDeleteNotice(`${deletedName} deleted`);
+
+    if (deleteNoticeTimerRef.current !== null) {
+      window.clearTimeout(deleteNoticeTimerRef.current);
+    }
+    deleteNoticeTimerRef.current = window.setTimeout(() => {
+      setDeleteNotice(null);
+      deleteNoticeTimerRef.current = null;
+    }, 1_400);
+  }, [sceneSnapshot.action, sceneSnapshot.isMoving]);
+
+  useEffect(() => {
+    const handleDeleteKey = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        (event.key !== 'Delete' && event.key !== 'Backspace') ||
+        isTextEntryTarget(event.target) ||
+        !managerRef.current?.objectStore.selected
+      ) return;
+
+      event.preventDefault();
+      handleDeleteSelected();
+    };
+
+    window.addEventListener('keydown', handleDeleteKey);
+    return () => window.removeEventListener('keydown', handleDeleteKey);
+  }, [handleDeleteSelected]);
+
+  const handleExport = async (format: ExportFormat) => {
+    if (exportInFlightRef.current) return;
+    const objects = managerRef.current?.objectStore.objects ?? [];
+    const formatLabel = EXPORT_LABELS[format];
+    if (objects.length === 0) {
+      setExportState({ status: 'error', message: 'Create an object before exporting.' });
+      return;
+    }
+
+    exportInFlightRef.current = true;
+    setExportState({ status: 'working', message: `Preparing ${formatLabel}…` });
+    try {
+      const file = await createExportFile(objects, format);
+      downloadExportFile(file);
+      setExportState({ status: 'success', message: `${formatLabel} downloaded.` });
+    } catch (error) {
+      setExportState({
+        status: 'error',
+        message: error instanceof Error ? error.message : `${formatLabel} export failed.`,
+      });
+    } finally {
+      exportInFlightRef.current = false;
+    }
+  };
+
+  const actionHint = deleteNotice
+    ? 'Select another object to keep working.'
+    : getActionHint(sceneSnapshot, primitiveType);
+  const sceneStatus = deleteNotice ?? getSceneStatus(sceneSnapshot);
   const gestureDisplay = getGestureDisplay(
     gestureStatus,
     camStatus,
@@ -110,6 +230,15 @@ export default function App() {
   );
   const cameraAvailable = camStatus === 'ready' || camStatus === 'requesting';
   const blocked = camStatus === 'denied' || camStatus === 'no-device' || camStatus === 'error';
+  const objectCount = managerRef.current?.objectStore.size ?? 0;
+  const canDelete = Boolean(sceneSnapshot.selectedName) &&
+    !sceneSnapshot.isMoving &&
+    sceneSnapshot.action !== 'combine';
+  const exportDisabled = objectCount === 0 || exportState.status === 'working';
+  const exportMessage = exportState.message ||
+    (objectCount === 0
+      ? 'Create an object before exporting.'
+      : `${objectCount} object${objectCount === 1 ? '' : 's'} ready to export.`);
 
   return (
     <div className="editor-shell">
@@ -179,7 +308,7 @@ export default function App() {
         <section className="property-section">
           <div className="section-heading">Selection</div>
           <div
-            className={`object-status ${sceneSnapshot.notice ? `command-${sceneSnapshot.action}` : ''}`}
+            className={`object-status ${deleteNotice ? 'command-delete' : sceneSnapshot.notice ? `command-${sceneSnapshot.action}` : ''}`}
             role="status"
             aria-live="polite"
           >
@@ -189,6 +318,60 @@ export default function App() {
           {sceneSnapshot.selectedName && (
             <div className="selected-name">{sceneSnapshot.selectedName}</div>
           )}
+          <div className="selection-actions">
+            <button
+              type="button"
+              className="delete-button"
+              disabled={!canDelete}
+              aria-keyshortcuts="Delete Backspace"
+              onClick={handleDeleteSelected}
+            >
+              <span>Delete object</span>
+              <kbd aria-hidden="true">Del</kbd>
+            </button>
+          </div>
+        </section>
+
+        <section className="property-section export-section">
+          <div className="section-heading">Export</div>
+          <div className="export-actions">
+            <button
+              type="button"
+              className="export-button export-primary"
+              disabled={exportDisabled}
+              onClick={() => void handleExport('stl')}
+            >
+              Export STL
+            </button>
+            <div className="export-secondary">
+              <button
+                type="button"
+                className="export-button"
+                disabled={exportDisabled}
+                onClick={() => void handleExport('obj')}
+              >
+                Export OBJ
+              </button>
+              <button
+                type="button"
+                className="export-button"
+                disabled={exportDisabled}
+                onClick={() => void handleExport('glb')}
+              >
+                Export GLB
+              </button>
+            </div>
+          </div>
+          <p className="hint export-hint">
+            STL joins overlaps and verifies closed solids before downloading.
+          </p>
+          <div
+            className={`export-status export-${exportState.status}`}
+            role="status"
+            aria-live="polite"
+          >
+            {exportMessage}
+          </div>
         </section>
       </aside>
 
@@ -226,16 +409,16 @@ function getActionHint(snapshot: SceneControllerSnapshot, primitiveType: Primiti
   const gestureActive = snapshot.isMoving && snapshot.input === 'gesture';
   const mouseActive = snapshot.isMoving && snapshot.input === 'mouse';
   switch (snapshot.action) {
+    case 'transform':
+      return gestureActive
+        ? 'Move both hands together to place it, spread to resize, or turn the hand-to-hand line to rotate.'
+        : 'Pinch the same object with both hands to move, resize, and rotate it.';
     case 'rotate':
       if (mouseActive) return 'Drag sideways to spin or vertically to tilt.';
-      return gestureActive
-        ? 'Rotation stays locked even if the Victory gesture stops recognizing.'
-        : 'Show a Victory sign to start, or hold R and drag.';
+      return 'Hold R and drag the object.';
     case 'scale':
       if (mouseActive) return 'Drag up to grow or down to shrink.';
-      return gestureActive
-        ? 'Spread thumb and index to grow; pinch them together to shrink.'
-        : 'Show a thumb up to start, or hold S and drag.';
+      return 'Hold S and drag, or pinch the object with both hands.';
     case 'shape':
       if (mouseActive) return 'Drag up to stretch height or down to squash it.';
       return gestureActive
@@ -244,23 +427,33 @@ function getActionHint(snapshot: SceneControllerSnapshot, primitiveType: Primiti
     case 'move':
       if (mouseActive) return 'Drag to place the object on the current view plane.';
       return gestureActive
-        ? 'Move your hand to place the object. Move closer or farther to change depth.'
-        : 'Close your fist to grab, or drag the object with the mouse.';
+        ? 'Keep thumb and index pinched while you move. Separate them to release.'
+        : 'Pinch directly on the object to grab it, or drag it with the mouse.';
     case 'create':
       return snapshot.notice
         ? 'Open Palm recognized. Relax your hand before creating another object.'
         : `Hold an open palm to create a ${PRIMITIVE_LABELS[primitiveType]} at your hand.`;
     case 'delete':
-      return snapshot.notice
-        ? 'Thumb Down recognized. Relax your hand before deleting another object.'
-        : snapshot.selectedName
-          ? 'Hold a Thumb Down to delete the selected object.'
-          : 'Point at an object to select it before deleting.';
+      return snapshot.selectedName
+        ? 'Use Delete object or press Delete / Backspace.'
+        : 'Select an object before deleting it.';
+    case 'combine':
+      return snapshot.notice?.endsWith('combined')
+        ? 'Release both pinches before combining another pair.'
+        : 'Pinch one overlapping object with each hand and hold.';
     default:
       return snapshot.selectedName
-        ? 'Click and drag, or close your fist to move it.'
-        : 'Click the box, or point at it with your index finger to select it.';
+        ? 'Pinch it to move, pinch with both hands to transform, or press Delete to remove it.'
+        : 'Pinch an object directly to grab it, or click it with the mouse.';
   }
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement;
 }
 
 function getSceneStatus(snapshot: SceneControllerSnapshot): string {
@@ -268,12 +461,16 @@ function getSceneStatus(snapshot: SceneControllerSnapshot): string {
   if (!snapshot.selectedName) return 'No object selected';
   if (!snapshot.isMoving) return 'Object selected';
   switch (snapshot.action) {
+    case 'transform':
+      return 'Transforming selected object';
     case 'rotate':
       return 'Rotating selected object';
     case 'scale':
       return 'Resizing selected object';
     case 'shape':
       return 'Shaping selected object';
+    case 'combine':
+      return 'Combining objects';
     default:
       return 'Moving selected object';
   }
@@ -287,6 +484,13 @@ function ControlCoach({ snapshot }: { snapshot: SceneControllerSnapshot }) {
         <strong>{controlTitle(snapshot)}</strong>
       </div>
       <div className="coach-directions">
+        {snapshot.action === 'transform' && (
+          <>
+            <span><b aria-hidden="true">✥</b> Move together to place</span>
+            <span><b aria-hidden="true">↔</b> Spread to resize</span>
+            <span><b aria-hidden="true">⟳</b> Turn the line to rotate</span>
+          </>
+        )}
         {snapshot.action === 'rotate' && (
           <>
             <span><b aria-hidden="true">← →</b> Move sideways to spin</span>
@@ -303,16 +507,24 @@ function ControlCoach({ snapshot }: { snapshot: SceneControllerSnapshot }) {
           <span><b aria-hidden="true">↔</b> Spread to grow · pinch to shrink</span>
         )}
         {snapshot.action === 'move' && (
-          <span><b aria-hidden="true">✥</b> Move your hand to place the object</span>
+          <span><b aria-hidden="true">✥</b> Keep pinching and move your hand</span>
         )}
       </div>
-      <span className="coach-release">Open your palm or lower your hand to finish</span>
+      <span className="coach-release">
+        {snapshot.action === 'transform'
+          ? 'Release one pinch for one-hand move, or both to finish'
+          : snapshot.action === 'move'
+            ? 'Separate thumb and index to release'
+            : 'Relax your hand or lower it to finish'}
+      </span>
     </section>
   );
 }
 
 function controlTitle(snapshot: SceneControllerSnapshot): string {
   switch (snapshot.action) {
+    case 'transform':
+      return 'Two-hand transform';
     case 'rotate':
       return 'Rotation locked';
     case 'scale':
@@ -353,10 +565,21 @@ function getGestureDisplay(
   if (gestureStatus === 'error' || gestureStatus === 'no-camera') {
     return { label: 'Hand controls unavailable', detail: 'Reload to try again', idle: true };
   }
+  if (snapshot.action === 'combine') {
+    return {
+      label: 'Combine',
+      detail: snapshot.notice?.endsWith('combined')
+        ? 'Release both pinches before combining again'
+        : (snapshot.notice ?? 'Keep both pinches steady'),
+      idle: false,
+    };
+  }
   if (snapshot.isMoving && snapshot.input === 'gesture') {
     return {
       label: controlTitle(snapshot),
-      detail: 'Move your hand to adjust the object',
+      detail: snapshot.action === 'transform'
+        ? 'Move together · spread · turn'
+        : 'Keep pinching while you move',
       idle: false,
     };
   }
@@ -364,7 +587,7 @@ function getGestureDisplay(
     return { label: 'No hand detected', detail: 'Show one hand to begin', idle: true };
   }
   if (currentGesture === 'None') {
-    return { label: 'Hand detected', detail: 'Make a gesture to choose an action', idle: true };
+    return { label: 'Hand detected', detail: 'Pinch an object to grab it', idle: true };
   }
   return {
     label: labelFor(currentGesture),

@@ -20,6 +20,17 @@ export class ObjectStore {
     return this.selectedObject;
   }
 
+  /** Modeling roots only; selection helpers and gesture feedback are excluded. */
+  get objects(): readonly THREE.Object3D[] {
+    return this.group.children.filter(
+      (child) => child.userData.aircadSelectable === true,
+    );
+  }
+
+  get size(): number {
+    return this.objects.length;
+  }
+
   /** Add a modeling object and mark it as eligible for gesture selection. */
   add<T extends THREE.Object3D>(object: T): T {
     object.userData.aircadSelectable = true;
@@ -90,7 +101,11 @@ export class ObjectStore {
 
   private nextObjectName(object: THREE.Object3D): string {
     const primitive = object.userData.aircadPrimitive;
-    const baseName = isPrimitiveType(primitive) ? PRIMITIVE_LABELS[primitive] : 'Object';
+    const baseName = object.userData.aircadCombined
+      ? 'Combined'
+      : isPrimitiveType(primitive)
+        ? PRIMITIVE_LABELS[primitive]
+        : 'Object';
     const nextCount = (this.nameCounts.get(baseName) ?? 0) + 1;
     this.nameCounts.set(baseName, nextCount);
     return `${baseName} ${nextCount}`;

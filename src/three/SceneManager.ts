@@ -30,6 +30,7 @@ export class SceneManager {
   readonly objects: THREE.Group;
   readonly objectStore: ObjectStore;
   readonly gestureCursor: GestureCursor;
+  readonly combineCursors: readonly [GestureCursor, GestureCursor];
 
   /** True while pointer modeling input owns the scene interaction lock. */
   mouseInteractionActive = false;
@@ -82,6 +83,20 @@ export class SceneManager {
     this.scene.add(this.objects);
     this.objectStore = new ObjectStore(this.objects);
     this.gestureCursor = new GestureCursor(this.scene);
+    this.combineCursors = [
+      new GestureCursor(this.scene, {
+        name: '__aircad-combine-cursor-left',
+        hitColor: 0x7c9fe8,
+        showBeam: false,
+        markerScale: 1.15,
+      }),
+      new GestureCursor(this.scene, {
+        name: '__aircad-combine-cursor-right',
+        hitColor: 0xa8bd68,
+        showBeam: false,
+        markerScale: 1.15,
+      }),
+    ];
 
     this.setupLights();
     this.setupEnvironment();
@@ -181,6 +196,7 @@ export class SceneManager {
     cancelAnimationFrame(this.rafId);
     this.objectStore.dispose();
     this.gestureCursor.dispose();
+    this.combineCursors.forEach((cursor) => cursor.dispose());
     this.onBeforeRender = null;
     if (!this.resizeObserver) window.removeEventListener('resize', this.handleResize);
     this.resizeObserver?.disconnect();

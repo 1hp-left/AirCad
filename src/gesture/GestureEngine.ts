@@ -6,6 +6,8 @@ import type {
   GestureEngineStatus,
 } from './types';
 import { OneEuroFilter } from './OneEuroFilter';
+import { isPinchClosed, pinchStrength } from './landmarkUtils';
+import { Gesture } from './gestures';
 import { LANDMARK } from './types';
 
 /**
@@ -32,9 +34,11 @@ export class GestureEngine {
   private readonly listeners = new Set<GestureListener>();
   private readonly statusListeners = new Set<(s: GestureEngineStatus) => void>();
 
-  // Per-hand, per-landmark, per-axis filter banks. Indexed by hand index then
-  // landmark index then axis (x=0,y=1,z=2). Recreated when hand count changes.
-  private filters: OneEuroFilter[][][] = [];
+  // Keying filters by handedness prevents two hands from inheriting each
+  // other's history when MediaPipe changes result order between frames.
+  private readonly filters = new Map<string, OneEuroFilter[][]>();
+  private readonly pinchStates = new Map<string, boolean>();
+  private readonly trackerLastSeen = new Map<string, number>();
   constructor(private readonly modelPath = '/models/gesture_recognizer.task') {}
 
   // ---------------------------------------------------------------- public API
@@ -114,6 +118,9 @@ export class GestureEngine {
     this.recognizer?.close();
     this.recognizer = null;
     this.video = null;
+    this.filters.clear();
+    this.pinchStates.clear();
+    this.trackerLastSeen.clear();
     this.listeners.clear();
     this.statusListeners.clear();
   }
@@ -150,58 +157,75 @@ export class GestureEngine {
   /** Decode MediaPipe's result object into our HandResult[] + smooth landmarks. */
   private decode(raw: GestureRecognizerResult, timeS: number): HandResult[] {
     const nHands = raw.landmarks?.length ?? 0;
-    this.ensureFilterBank(nHands);
-
     const hands: HandResult[] = [];
+    const handednessCounts = new Map<string, number>();
     for (let h = 0; h < nHands; h++) {
-      const landmarks = raw.landmarks[h];
-      const worldLandmarks = raw.worldLandmarks[h];
+      const rawLandmarks = raw.landmarks[h];
+      const worldLandmarks = raw.worldLandmarks[h] ?? rawLandmarks;
       const handedness = raw.handednesses[h]?.[0]?.categoryName ?? 'Unknown';
-      const top = raw.gestures[h]?.[0];
-      const gesture = top?.categoryName ?? 'None';
-      const score = top?.score ?? 0;
+      const occurrence = handednessCounts.get(handedness) ?? 0;
+      handednessCounts.set(handedness, occurrence + 1);
+      const trackingKey = `${handedness}:${occurrence}`;
+      this.trackerLastSeen.set(trackingKey, timeS);
 
-      hands.push({
+      const landmarks = this.smoothLandmarks(trackingKey, rawLandmarks, timeS);
+      const top = raw.gestures[h]?.[0];
+      const hand: HandResult = {
         handedness,
-        gesture,
-        score,
-        landmarks: this.smoothLandmarks(h, landmarks, timeS),
+        gesture: top?.categoryName ?? Gesture.NONE,
+        score: top?.score ?? 0,
+        pinching: false,
+        pinchStrength: 0,
+        landmarks,
         worldLandmarks, // world landmarks we leave unsmoothed (lower noise, sparser use)
-      });
+      };
+
+      hand.pinchStrength = pinchStrength(hand);
+      hand.pinching = isPinchClosed(hand, this.pinchStates.get(trackingKey) ?? false);
+      this.pinchStates.set(trackingKey, hand.pinching);
+      if (hand.pinching) {
+        hand.gesture = Gesture.PINCH;
+        hand.score = 1;
+      }
+      hands.push(hand);
     }
+    this.pruneTrackers(timeS);
     return hands;
   }
 
-  /** Lazily (re)create the filter bank for the current hand count. */
-  private ensureFilterBank(nHands: number): void {
-    if (this.filters.length === nHands) return;
-    this.filters = [];
-    for (let h = 0; h < nHands; h++) {
-      // 21 landmarks × 3 axes
-      const perLandmark: OneEuroFilter[][] = [];
-      for (let l = 0; l < 21; l++) {
-        perLandmark.push([
-          new OneEuroFilter(1.0, 0.007, 1.0), // x
-          new OneEuroFilter(1.0, 0.007, 1.0), // y
-          new OneEuroFilter(1.0, 0.007, 1.0), // z
-        ]);
-      }
-      this.filters.push(perLandmark);
-    }
+  private createFilterBank(): OneEuroFilter[][] {
+    return Array.from({ length: 21 }, () => [
+      new OneEuroFilter(1.0, 0.007, 1.0),
+      new OneEuroFilter(1.0, 0.007, 1.0),
+      new OneEuroFilter(1.0, 0.007, 1.0),
+    ]);
   }
 
   /** Apply the 1-Euro filter to every landmark's x/y/z in normalized space. */
   private smoothLandmarks(
-    handIdx: number,
+    trackingKey: string,
     raw: { x: number; y: number; z: number }[],
     timeS: number,
   ): { x: number; y: number; z: number }[] {
-    const bank = this.filters[handIdx];
+    let bank = this.filters.get(trackingKey);
+    if (!bank) {
+      bank = this.createFilterBank();
+      this.filters.set(trackingKey, bank);
+    }
     return raw.map((lm, l) => ({
       x: bank[l][0].filter(lm.x, timeS),
       y: bank[l][1].filter(lm.y, timeS),
       z: bank[l][2].filter(lm.z, timeS),
     }));
+  }
+
+  private pruneTrackers(timeS: number): void {
+    for (const [key, lastSeen] of this.trackerLastSeen) {
+      if (timeS - lastSeen <= 0.75) continue;
+      this.trackerLastSeen.delete(key);
+      this.filters.delete(key);
+      this.pinchStates.delete(key);
+    }
   }
 }
 

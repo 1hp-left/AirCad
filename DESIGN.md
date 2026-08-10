@@ -152,11 +152,11 @@ The palette is a neutral graphite system with three narrowly assigned signals: b
 
 ### Primary
 
-- **Active blue** (`active`): marks the current primitive, focused controls, and selected-object outlines in the scene.
+- **Active blue** (`active`): marks the current primitive, focused controls, selected-object outlines, and the first combine cursor/target pair.
 
 ### Secondary
 
-- **Live tracking green** (`tracking`): appears only on gesture names, the hand cursor, and skeleton feedback while the system is reading or applying hand input.
+- **Live tracking green** (`tracking`): appears only on gesture names, hand cursors, skeleton feedback, and the second combine target while the system is reading or applying hand input.
 
 ### Tertiary
 
@@ -180,6 +180,8 @@ The palette is a neutral graphite system with three narrowly assigned signals: b
 **The Functional Color Rule.** Blue means active or selected, yellow-green means live tracking, and red means destructive; none of these colors is general decoration.
 
 **The One Signal Rule.** A compact control should normally show one signal color at a time so status remains unambiguous.
+
+**The Dual Target Rule.** Combine mode pairs blue and green cursors with matching object outlines. A neutral cursor means that pinch is not over a selectable object.
 
 ## Typography
 
@@ -239,6 +241,7 @@ Thin one-pixel borders establish most boundaries. Primitive glyphs use simple ge
 - **Primary:** active tools use a low-opacity blue field, blue text, and a darker blue boundary.
 - **Hover / Focus:** hover changes the graphite tone; keyboard focus uses a visible 2px blue inset outline.
 - **Neutral actions:** camera visibility and similar utility actions stay text-only until hovered or focused.
+- **Export hierarchy:** STL is the single primary export because it serves the product's printing goal; OBJ and GLB remain equal neutral alternatives beneath it.
 
 ### Cards / Containers
 
@@ -258,11 +261,21 @@ Each primitive is a 43px shelf tool with a geometric 17px glyph and a short labe
 
 ### Gesture Status and Coach
 
-Hand-control status uses one plain-language headline and one useful next step. The gesture coach appears only during continuous manipulation and states the locked action, movement direction, and release behavior without a decorative live marker.
+Hand-control status uses one plain-language headline and one useful next step. The gesture coach appears only during continuous manipulation and states the locked action, movement direction, and release behavior without a decorative live marker. Two-hand coaching names the three direct relationships: midpoint for placement, separation for size, and hand-to-hand angle for rotation.
+
+### Gesture Cursors
+
+Pointing and one-hand pinch targeting use one reticle with a visible ray. The reticle follows the midpoint between thumb and index so it matches the physical grab point. Combine mode uses two beamless reticles at the two pinch midpoints. A cursor stays neutral until it hits a selectable object, then changes to its assigned blue or green and adds a matching outline. Both cursors disappear after the union or when combine mode ends. The camera skeleton draws a short thumb-to-index line and midpoint ring as the fingers approach; the ring brightens when the pinch locks.
 
 ### Selected Object Label
 
 The selected name uses 10px monospace text inside a neutral one-pixel graphite border. Monospace belongs here because the label is an identifier, not because the product is technical.
+
+The Selection section keeps a full-width Delete object control visible beneath the current selection. It remains neutral and disabled until an object is selected, then uses the reserved danger color and shows the `Del` keyboard equivalent.
+
+### Export Controls
+
+The export section uses one full-width STL button and one two-column row for OBJ and GLB. Buttons remain square, compact desktop controls rather than cards. A plain text status below the controls reports the object count, active export, completed download, or validation error. STL copy says that overlaps are joined and closed solids are verified; it does not promise certified printability.
 
 ## Do's and Don'ts
 

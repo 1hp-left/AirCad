@@ -137,6 +137,14 @@
       "css": ".ds-camera-toggle { display:inline-flex; align-items:center; height:28px; padding:0 9px; border:0; border-radius:2px; color:var(--fg-dim, #b0b0b0); background:transparent; font:400 11px/1.2 'Segoe UI', sans-serif; cursor:pointer; } .ds-camera-toggle:hover { color:var(--fg, #e2e2e2); background:var(--panel-hover, #383838); } .ds-camera-toggle:focus-visible { outline:2px solid var(--accent, #7c9fe8); outline-offset:-2px; }"
     },
     {
+      "name": "Export Controls",
+      "kind": "button-group",
+      "refersTo": "export-actions",
+      "description": "A primary STL download with equal neutral OBJ and GLB alternatives, followed by plain status feedback.",
+      "html": "<div class=\"ds-export-actions\"><button class=\"ds-export-primary\">Export STL</button><div><button>Export OBJ</button><button>Export GLB</button></div><span role=\"status\">1 object ready to export.</span></div>",
+      "css": ".ds-export-actions { display:grid; width:220px; gap:6px; font-family:'Segoe UI', sans-serif; } .ds-export-actions > div { display:grid; grid-template-columns:1fr 1fr; gap:6px; } .ds-export-actions button { min-height:30px; border:1px solid var(--line-soft, #3b3b3b); border-radius:2px; color:var(--fg-dim, #b0b0b0); background:var(--raised, #2d2d2d); font-size:10px; font-weight:600; } .ds-export-actions .ds-export-primary { border-color:var(--accent-border, #4f6697); color:var(--accent, #7c9fe8); background:var(--accent-soft, rgba(124,159,232,.16)); } .ds-export-actions span { color:var(--fg-muted, #949494); font-size:10px; }"
+    },
+    {
       "name": "Property Field",
       "kind": "card",
       "refersTo": "property-field",
@@ -174,6 +182,7 @@
     "rules": [
       { "name": "The Functional Color Rule", "body": "Blue means active or selected, yellow-green means live tracking, and red means destructive; none of these colors is general decoration.", "section": "colors" },
       { "name": "The One Signal Rule", "body": "A compact control should normally show one signal color at a time so status remains unambiguous.", "section": "colors" },
+      { "name": "The Dual Target Rule", "body": "Combine mode pairs blue and green cursors with matching object outlines. A neutral cursor means that fist is not over a selectable object.", "section": "colors" },
       { "name": "The Application Chrome Rule", "body": "Type stays compact because the canvas is primary. Use sentence case, plain wording, and hierarchy from size or weight instead of miniature uppercase labels.", "section": "typography" },
       { "name": "The Structural Depth Rule", "body": "Use tone and a one-pixel boundary first; add the panel shadow only when a region floats above the 3D scene.", "section": "elevation" }
     ],

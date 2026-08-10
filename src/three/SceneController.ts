@@ -1,17 +1,19 @@
 import * as THREE from 'three';
 import { GESTURE_CONFIG, type ActionId } from '../config/gestures';
 import { GestureEngine } from '../gesture/GestureEngine';
-import { fingertipScreen } from '../gesture/landmarkUtils';
+import { fingertipScreen, pinchPoint } from '../gesture/landmarkUtils';
 import type { GestureFrame, HandResult } from '../gesture/types';
+import { CombineGesture } from './actions/CombineGesture';
 import { CreateAction } from './actions/CreateAction';
 import { MoveAction } from './actions/MoveAction';
 import { RotateAction } from './actions/RotateAction';
 import { ScaleAction } from './actions/ScaleAction';
 import { ShapeAction, type ShapeAxis } from './actions/ShapeAction';
+import { TwoHandTransformAction } from './actions/TwoHandTransformAction';
 import type { TransformAction } from './actions/TransformAction';
 import { ObjectStore } from './ObjectStore';
 import type { PrimitiveType } from './primitives';
-import { raycastSelectableAtNormalizedPoint } from './selection';
+import { normalizedToNdc, raycastSelectableAtNormalizedPoint } from './selection';
 import { SceneManager } from './SceneManager';
 
 export interface SceneControllerSnapshot {
@@ -31,11 +33,15 @@ const MAX_SELECTION_MISSES = 8;
 const ACTION_START_MS = 70;
 const ACTION_RELEASE_MS = 180;
 const HAND_LOST_GRACE_MS = 300;
+const PINCH_START_MS = 55;
+const PINCH_RELEASE_MS = 90;
+const CURSOR_DEPTH = 12;
 const ONE_SHOT_HOLD_MS = 220;
 const ONE_SHOT_RELEASE_MS = 180;
 
 type TransformActionId = 'move' | 'rotate' | 'scale' | 'shape';
 type OneShotActionId = 'create' | 'delete';
+type PinchMode = 'none' | 'move' | 'transform';
 
 /**
  * Bridges gesture frames into the Three.js scene loop.
@@ -59,14 +65,22 @@ export class SceneController {
   private oneShotReleaseSinceMs = 0;
   private releaseSinceMs = 0;
   private lastActiveHandSeenMs = 0;
+  private pinchMode: PinchMode = 'none';
+  private pinchHandedness: string | null = null;
+  private pinchCandidateKey = '';
+  private pinchCandidateSinceMs = 0;
+  private pinchReleaseSinceMs = 0;
   private lastFrameTimestamp = -1;
   private disposed = false;
   private primitiveType: PrimitiveType;
   private notice: string | null = null;
+  private readonly combineGesture: CombineGesture;
   private readonly createAction = new CreateAction();
+  private readonly moveAction = new MoveAction();
   private readonly shapeAction = new ShapeAction();
+  private readonly twoHandTransformAction = new TwoHandTransformAction();
   private readonly actions: Record<TransformActionId, TransformAction> = {
-    move: new MoveAction(),
+    move: this.moveAction,
     rotate: new RotateAction(),
     scale: new ScaleAction(),
     shape: this.shapeAction,
@@ -76,11 +90,17 @@ export class SceneController {
   private readonly store: ObjectStore;
   private readonly listeners = new Set<SceneControllerListener>();
   private readonly selectionRaycaster = new THREE.Raycaster();
+  private readonly pinchRaycasters = [new THREE.Raycaster(), new THREE.Raycaster()] as const;
   private readonly missEndpoint = new THREE.Vector3();
 
   constructor(manager: SceneManager, engine: GestureEngine, primitiveType: PrimitiveType = 'box') {
     this.manager = manager;
     this.store = manager.objectStore;
+    this.combineGesture = new CombineGesture(
+      manager.camera,
+      this.store,
+      manager.combineCursors,
+    );
     this.primitiveType = primitiveType;
     this.unsubscribe = engine.on((frame) => {
       this.latestFrame = frame;
@@ -97,16 +117,29 @@ export class SceneController {
 
   snapshot(): SceneControllerSnapshot {
     const selected = this.store.selected;
-    return {
-      action: this.activeAction
+    const pinchAction: ActionId | null = this.pinchMode === 'transform'
+      ? 'transform'
+      : this.pinchMode === 'move'
+        ? 'move'
+        : null;
+    const combining =
+      this.combineGesture.active ||
+      (this.previousAction === 'combine' && Boolean(this.notice));
+    const action = pinchAction ?? (
+      this.activeAction
         ? this.activeActionId
-        : this.notice && this.oneShotLatch
-          ? this.oneShotLatch
-          : this.previousAction,
+        : combining
+          ? 'combine'
+          : this.notice && this.oneShotLatch
+            ? this.oneShotLatch
+            : this.previousAction
+    );
+    return {
+      action,
       selectedName: selected?.name ?? null,
-      isMoving: this.activeAction !== null,
+      isMoving: this.pinchMode !== 'none' || this.activeAction !== null,
       shapeAxis: this.activeActionId === 'shape' ? this.shapeAction.axisLabel : null,
-      input: this.activeAction ? 'gesture' : null,
+      input: this.pinchMode !== 'none' || this.activeAction ? 'gesture' : null,
       notice: this.notice,
     };
   }
@@ -121,6 +154,8 @@ export class SceneController {
     this.unsubscribe();
     this.latestFrame = null;
     this.resetActiveAction();
+    this.resetPinchManipulation();
+    this.combineGesture.reset();
     this.manager.gestureCursor.hide();
     this.listeners.clear();
     if (this.manager.onBeforeRender === this.handleFrame) {
@@ -130,7 +165,11 @@ export class SceneController {
 
   private readonly handleFrame = (): void => {
     if (this.manager.mouseInteractionActive) {
+      const wasCombining = this.combineGesture.active || this.previousAction === 'combine';
       this.resetActiveAction();
+      this.resetPinchManipulation();
+      this.combineGesture.reset();
+      if (wasCombining) this.notice = null;
       this.manager.gestureCursor.hide();
       this.previousAction = 'none';
       this.emitSnapshot();
@@ -140,6 +179,21 @@ export class SceneController {
     const frame = this.latestFrame;
     if (!frame || frame.timestampMs === this.lastFrameTimestamp) return;
     this.lastFrameTimestamp = frame.timestampMs;
+
+    const pinchingHands = frame.hands
+      .filter((hand) => hand.pinching)
+      .sort(compareHands);
+
+    // Once a two-hand transform starts, it owns both pinches until one opens.
+    // This avoids accidentally switching to Combine when a rotating ray slips
+    // off the object for a frame.
+    if (
+      this.pinchMode === 'transform' &&
+      this.handlePinchManipulation(frame, pinchingHands)
+    ) return;
+
+    if (this.handleCombineGesture(frame, pinchingHands)) return;
+    if (this.handlePinchManipulation(frame, pinchingHands)) return;
 
     if (this.activeAction) {
       this.updateActiveAction(frame);
@@ -261,6 +315,249 @@ export class SceneController {
     this.emitSnapshot();
   }
 
+  private handleCombineGesture(
+    frame: GestureFrame,
+    pinchingHands: HandResult[],
+  ): boolean {
+    if (pinchingHands.length < 2 && !this.combineGesture.active) return false;
+
+    const update = this.combineGesture.update(pinchingHands, frame.timestampMs);
+    this.notice = update.notice;
+    if (update.released && frame.hands[0] && actionFor(frame.hands[0]) === 'create') {
+      this.blockOneShotUntilRelease('create');
+    }
+    if (!update.consumed) return false;
+
+    this.resetActiveAction();
+    this.resetPinchManipulation();
+    this.resetOneShotCandidate();
+    this.blockOneShotUntilRelease('create');
+    this.manager.gestureCursor.hide();
+    this.previousAction = 'combine';
+    this.emitSnapshot();
+    return true;
+  }
+
+  private handlePinchManipulation(
+    frame: GestureFrame,
+    pinchingHands: HandResult[],
+  ): boolean {
+    if (this.pinchMode === 'transform') {
+      return this.updateTwoHandTransform(frame, pinchingHands);
+    }
+    if (this.pinchMode === 'move') {
+      return this.updatePinchMove(frame, pinchingHands);
+    }
+
+    if (!pinchingHands.length) {
+      this.resetPinchCandidate();
+      return false;
+    }
+
+    this.resetActiveAction();
+    this.blockOneShotUntilRelease('create');
+    this.notice = null;
+
+    if (pinchingHands.length >= 2) {
+      const target = this.sharedPinchTarget(pinchingHands[0], pinchingHands[1]);
+      if (target) this.startTwoHandTransform(target, pinchingHands[0], pinchingHands[1]);
+      else {
+        this.manager.gestureCursor.hide();
+        this.previousAction = 'none';
+        this.emitSnapshot();
+      }
+      return true;
+    }
+
+    return this.advancePinchMove(pinchingHands[0], frame.timestampMs);
+  }
+
+  private advancePinchMove(hand: HandResult, timestampMs: number): boolean {
+    const hit = raycastSelectableAtNormalizedPoint(
+      pinchPoint(hand),
+      this.manager.camera,
+      this.store.group,
+      this.selectionRaycaster,
+    );
+    const ray = this.selectionRaycaster.ray;
+    this.manager.gestureCursor.show(
+      ray,
+      hit?.point ?? this.missEndpoint.copy(ray.origin).addScaledVector(ray.direction, CURSOR_DEPTH),
+      hit !== null,
+    );
+
+    if (!hit) {
+      this.resetPinchCandidate();
+      this.previousAction = 'none';
+      this.emitSnapshot();
+      return true;
+    }
+
+    this.store.select(hit.object);
+    const candidateKey = `${hand.handedness}:${hit.object.uuid}`;
+    if (candidateKey !== this.pinchCandidateKey) {
+      this.pinchCandidateKey = candidateKey;
+      this.pinchCandidateSinceMs = timestampMs;
+      this.previousAction = 'move';
+      this.emitSnapshot();
+      return true;
+    }
+    if (timestampMs - this.pinchCandidateSinceMs < PINCH_START_MS) return true;
+
+    this.resetActiveAction();
+    this.resetPinchManipulation();
+    this.moveAction.start(hit.object, hand, this.manager.camera);
+    this.pinchMode = 'move';
+    this.pinchHandedness = hand.handedness;
+    this.notice = null;
+    this.blockOneShotUntilRelease('create');
+    this.previousAction = 'move';
+    this.emitSnapshot();
+    return true;
+  }
+
+  private updatePinchMove(frame: GestureFrame, pinchingHands: HandResult[]): boolean {
+    if (pinchingHands.length >= 2) {
+      const target = this.sharedPinchTarget(pinchingHands[0], pinchingHands[1]);
+      if (target) {
+        this.startTwoHandTransform(target, pinchingHands[0], pinchingHands[1]);
+      }
+      return true;
+    }
+
+    const activeHand = pinchingHands.find(
+      (hand) => hand.handedness === this.pinchHandedness,
+    ) ?? (pinchingHands.length === 1 ? pinchingHands[0] : null);
+
+    if (activeHand) {
+      this.pinchReleaseSinceMs = 0;
+      this.moveAction.update(activeHand, this.manager.camera);
+      this.showActivePinchCursor(activeHand, this.moveAction.object);
+      this.store.updateSelectionOutline();
+      this.previousAction = 'move';
+      this.emitSnapshot();
+      return true;
+    }
+
+    const activeHandStillTracked = frame.hands.some(
+      (hand) => hand.handedness === this.pinchHandedness,
+    );
+    const releaseDelay = activeHandStillTracked ? PINCH_RELEASE_MS : HAND_LOST_GRACE_MS;
+    if (!this.pinchReleaseSinceMs) this.pinchReleaseSinceMs = frame.timestampMs;
+    if (frame.timestampMs - this.pinchReleaseSinceMs < releaseDelay) return true;
+
+    this.resetPinchManipulation();
+    this.previousAction = 'none';
+    this.emitSnapshot();
+    return true;
+  }
+
+  private startTwoHandTransform(
+    target: THREE.Object3D,
+    firstHand: HandResult,
+    secondHand: HandResult,
+  ): void {
+    this.resetActiveAction();
+    this.resetPinchManipulation();
+    this.store.select(target);
+    this.twoHandTransformAction.start(target, firstHand, secondHand, this.manager.camera);
+    this.pinchMode = 'transform';
+    this.notice = null;
+    this.blockOneShotUntilRelease('create');
+    this.manager.gestureCursor.hide();
+    this.previousAction = 'transform';
+    this.emitSnapshot();
+  }
+
+  private updateTwoHandTransform(
+    frame: GestureFrame,
+    pinchingHands: HandResult[],
+  ): boolean {
+    if (pinchingHands.length >= 2) {
+      this.pinchReleaseSinceMs = 0;
+      this.twoHandTransformAction.update(
+        pinchingHands[0],
+        pinchingHands[1],
+        this.manager.camera,
+      );
+      this.store.updateSelectionOutline();
+      this.previousAction = 'transform';
+      this.emitSnapshot();
+      return true;
+    }
+
+    const releaseDelay = frame.hands.length >= 2 ? PINCH_RELEASE_MS : HAND_LOST_GRACE_MS;
+    if (!this.pinchReleaseSinceMs) this.pinchReleaseSinceMs = frame.timestampMs;
+    if (frame.timestampMs - this.pinchReleaseSinceMs < releaseDelay) return true;
+
+    const target = this.twoHandTransformAction.object;
+    if (target && pinchingHands.length === 1) {
+      const remainingHand = pinchingHands[0];
+      this.twoHandTransformAction.reset();
+      this.moveAction.start(target, remainingHand, this.manager.camera);
+      this.pinchMode = 'move';
+      this.pinchHandedness = remainingHand.handedness;
+      this.pinchReleaseSinceMs = 0;
+      this.previousAction = 'move';
+      this.emitSnapshot();
+      return true;
+    }
+
+    this.resetPinchManipulation();
+    this.previousAction = 'none';
+    this.emitSnapshot();
+    return true;
+  }
+
+  private sharedPinchTarget(
+    firstHand: HandResult,
+    secondHand: HandResult,
+  ): THREE.Object3D | null {
+    const first = raycastSelectableAtNormalizedPoint(
+      pinchPoint(firstHand),
+      this.manager.camera,
+      this.store.group,
+      this.pinchRaycasters[0],
+    )?.object ?? null;
+    const second = raycastSelectableAtNormalizedPoint(
+      pinchPoint(secondHand),
+      this.manager.camera,
+      this.store.group,
+      this.pinchRaycasters[1],
+    )?.object ?? null;
+    return first && first === second ? first : null;
+  }
+
+  private showActivePinchCursor(
+    hand: HandResult,
+    target: THREE.Object3D | null,
+  ): void {
+    this.selectionRaycaster.setFromCamera(
+      normalizedToNdc(pinchPoint(hand)),
+      this.manager.camera,
+    );
+    const ray = this.selectionRaycaster.ray;
+    const endpoint = target
+      ? target.getWorldPosition(this.missEndpoint)
+      : this.missEndpoint.copy(ray.origin).addScaledVector(ray.direction, CURSOR_DEPTH);
+    this.manager.gestureCursor.show(ray, endpoint, target !== null);
+  }
+
+  private resetPinchCandidate(): void {
+    this.pinchCandidateKey = '';
+    this.pinchCandidateSinceMs = 0;
+  }
+
+  private resetPinchManipulation(): void {
+    this.moveAction.reset();
+    this.twoHandTransformAction.reset();
+    this.pinchMode = 'none';
+    this.pinchHandedness = null;
+    this.pinchReleaseSinceMs = 0;
+    this.resetPinchCandidate();
+    this.manager.gestureCursor.hide();
+  }
+
   private findActiveHand(hands: HandResult[]): HandResult | null {
     if (!hands.length) return null;
     return (
@@ -374,4 +671,9 @@ function isTransformAction(action: ActionId): action is TransformActionId {
 
 function isOneShotAction(action: ActionId): action is OneShotActionId {
   return action === 'create' || action === 'delete';
+}
+
+function compareHands(first: HandResult, second: HandResult): number {
+  const byHandedness = first.handedness.localeCompare(second.handedness);
+  return byHandedness || pinchPoint(first).x - pinchPoint(second).x;
 }

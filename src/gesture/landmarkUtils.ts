@@ -9,6 +9,12 @@ import * as THREE from 'three';
 
 export type Vec3 = { x: number; y: number; z: number };
 
+const PINCH_START_RATIO = 0.38;
+const PINCH_RELEASE_RATIO = 0.56;
+const PINCH_FULL_STRENGTH_RATIO = 0.18;
+const PINCH_ZERO_STRENGTH_RATIO = 0.82;
+const MIN_PALM_WIDTH = 0.0001;
+
 const PALM_LANDMARKS = [
   LANDMARK.WRIST,
   LANDMARK.INDEX_MCP,
@@ -26,15 +32,64 @@ export function distance(a: Vec3, b: Vec3): number {
 }
 
 /**
- * Pinch distance — thumb tip ↔ index tip distance in WORLD landmarks.
- * World landmarks are in meters, so this is a real, hand-scale-invariant
- * distance (independent of how close the hand is to the camera). Typical
- * pinch ≈ 0.02–0.09 m; relaxed ≈ 0.10–0.18 m.
+ * Thumb-tip to index-tip distance in world landmarks. This is independent of
+ * camera distance; use `pinchRatio` when hand-size invariance also matters.
  */
 export function pinchDistance(hand: HandResult): number {
   return distance(
     hand.worldLandmarks[LANDMARK.THUMB_TIP],
     hand.worldLandmarks[LANDMARK.INDEX_TIP],
+  );
+}
+
+/** Thumb/index midpoint used as the direct-manipulation cursor. */
+export function pinchPoint(hand: Pick<HandResult, 'landmarks'>): Vec3 {
+  const thumb = hand.landmarks[LANDMARK.THUMB_TIP];
+  const index = hand.landmarks[LANDMARK.INDEX_TIP];
+  return {
+    x: (thumb.x + index.x) / 2,
+    y: (thumb.y + index.y) / 2,
+    z: (thumb.z + index.z) / 2,
+  };
+}
+
+/**
+ * Thumb/index gap divided by palm width. The ratio works across hand sizes and
+ * camera distance, unlike a fixed pixel or meter threshold.
+ */
+export function pinchRatio(
+  hand: Pick<HandResult, 'landmarks' | 'worldLandmarks'>,
+): number {
+  const points = hand.worldLandmarks.length >= 21
+    ? hand.worldLandmarks
+    : hand.landmarks;
+  const gap = distance(points[LANDMARK.THUMB_TIP], points[LANDMARK.INDEX_TIP]);
+  const palmWidth = distance(points[LANDMARK.INDEX_MCP], points[LANDMARK.PINKY_MCP]);
+  return gap / Math.max(palmWidth, MIN_PALM_WIDTH);
+}
+
+/** Stable pinch state: easy to close, but requires a wider gap to release. */
+export function isPinchClosed(
+  hand: Pick<HandResult, 'landmarks' | 'worldLandmarks'>,
+  wasClosed = false,
+): boolean {
+  const ratio = pinchRatio(hand);
+  return Number.isFinite(ratio) && ratio <= (wasClosed ? PINCH_RELEASE_RATIO : PINCH_START_RATIO);
+}
+
+/** Continuous pinch amount used only for feedback, not action switching. */
+export function pinchStrength(
+  hand: Pick<HandResult, 'landmarks' | 'worldLandmarks'>,
+): number {
+  const ratio = pinchRatio(hand);
+  if (!Number.isFinite(ratio)) return 0;
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      (PINCH_ZERO_STRENGTH_RATIO - ratio) /
+        (PINCH_ZERO_STRENGTH_RATIO - PINCH_FULL_STRENGTH_RATIO),
+    ),
   );
 }
 
