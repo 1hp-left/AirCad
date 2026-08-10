@@ -21,8 +21,13 @@ pnpm-debug.log*
 # Local tooling output
 .claude/
 .playwright-mcp/
-.impeccable/live/annotations/
-.impeccable/live/sessions/
+.impeccable/
+
+# Local review artifacts
+/*.png
+/aircad-*.txt
+/DESIGN.md
+/PRODUCT.md
 
 # MediaPipe training artifacts
 training/dataset/
