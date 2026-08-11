@@ -22,6 +22,7 @@ pnpm-debug.log*
 .claude/
 .playwright-mcp/
 .impeccable/
+.superdesign/
 
 # Local review artifacts
 /*.png

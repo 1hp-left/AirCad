@@ -67,7 +67,7 @@ export class ObjectStore {
     this.selectedObject = object;
 
     if (object) {
-      this.selectionOutline = new THREE.BoxHelper(object, 0x7c9fe8);
+      this.selectionOutline = new THREE.BoxHelper(object, 0xe68a2e);
       this.selectionOutline.name = '__aircad-selection-outline';
       this.selectionOutline.userData.aircadSelectable = false;
       this.group.add(this.selectionOutline);

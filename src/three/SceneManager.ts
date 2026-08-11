@@ -32,6 +32,10 @@ export class SceneManager {
   readonly gestureCursor: GestureCursor;
   readonly combineCursors: readonly [GestureCursor, GestureCursor];
 
+  private readonly grid: THREE.GridHelper;
+  private readonly floor: THREE.Mesh;
+  private readonly axes: THREE.AxesHelper;
+
   /** True while pointer modeling input owns the scene interaction lock. */
   mouseInteractionActive = false;
 
@@ -99,7 +103,10 @@ export class SceneManager {
     ];
 
     this.setupLights();
-    this.setupEnvironment();
+    const environment = this.setupEnvironment();
+    this.grid = environment.grid;
+    this.floor = environment.floor;
+    this.axes = environment.axes;
 
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resizeToCanvas());
@@ -144,7 +151,11 @@ export class SceneManager {
     this.scene.add(new THREE.HemisphereLight(0x4a5568, 0x1a202c, 0.55));
   }
 
-  private setupEnvironment(): void {
+  private setupEnvironment(): {
+    grid: THREE.GridHelper;
+    floor: THREE.Mesh;
+    axes: THREE.AxesHelper;
+  } {
     // Ground grid — the modeling "table".
     const grid = new THREE.GridHelper(40, 40, 0x2a3344, 0x1a2030);
     grid.position.y = 0;
@@ -166,6 +177,7 @@ export class SceneManager {
     (axes.material as THREE.Material).depthTest = false;
     axes.renderOrder = 999;
     this.scene.add(axes);
+    return { grid, floor, axes };
   }
 
   /** Start with one editable object so first-run gesture controls are testable. */
@@ -185,6 +197,60 @@ export class SceneManager {
       this.renderer.render(this.scene, this.camera);
     };
     this.rafId = requestAnimationFrame(loop);
+  }
+
+  get gridVisible(): boolean {
+    return this.grid.visible;
+  }
+
+  get axesVisible(): boolean {
+    return this.axes.visible;
+  }
+
+  setGridVisible(visible: boolean): void {
+    this.grid.visible = visible;
+    this.floor.visible = visible;
+  }
+
+  setAxesVisible(visible: boolean): void {
+    this.axes.visible = visible;
+  }
+
+  frameSelected(): boolean {
+    const selected = this.objectStore.selected;
+    return selected ? this.frameObjects([selected]) : false;
+  }
+
+  frameAll(): boolean {
+    return this.frameObjects(this.objectStore.objects);
+  }
+
+  resetView(): void {
+    this.camera.position.set(7, 6, 9);
+    this.controls.target.set(0, 0.5, 0);
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+  }
+
+  private frameObjects(objects: readonly THREE.Object3D[]): boolean {
+    if (objects.length === 0) return false;
+    const bounds = new THREE.Box3();
+    objects.forEach((object) => bounds.expandByObject(object));
+    if (bounds.isEmpty()) return false;
+
+    const center = bounds.getCenter(new THREE.Vector3());
+    const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+    const direction = this.camera.position.clone().sub(this.controls.target);
+    if (direction.lengthSq() < 0.0001) direction.set(1, 0.75, 1);
+    direction.normalize();
+    const halfFov = THREE.MathUtils.degToRad(this.camera.fov * 0.5);
+    const distance = Math.max(3, (sphere.radius || 1) / Math.sin(halfFov) * 1.25);
+
+    this.controls.target.copy(center);
+    this.camera.position.copy(center).addScaledVector(direction, distance);
+    this.camera.lookAt(center);
+    this.controls.update();
+    return true;
   }
 
   private handleResize = (): void => {

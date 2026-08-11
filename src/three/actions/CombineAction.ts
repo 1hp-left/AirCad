@@ -49,6 +49,16 @@ export class CombineAction {
       });
   }
 
+  async executeWhenReady(
+    first: THREE.Object3D,
+    second: THREE.Object3D,
+    store: ObjectStore,
+  ): Promise<CombineResult> {
+    this.prepare();
+    await this.loadPromise;
+    return this.execute(first, second, store);
+  }
+
   execute(first: THREE.Object3D, second: THREE.Object3D, store: ObjectStore): CombineResult {
     const unionEngine = this.unionEngine;
     if (!unionEngine) {

@@ -4,7 +4,13 @@ import { useGestureEngine } from './hooks/useGestureEngine';
 import { useWebcam, type WebcamStatus } from './hooks/useWebcam';
 import type { GestureEngineStatus } from './gesture/types';
 import { GestureLegend } from './ui/GestureLegend';
+import { MenuBar } from './ui/MenuBar';
 import { WebcamOverlay } from './ui/WebcamOverlay';
+import { AssistantPanel } from './assistant/AssistantPanel';
+import { VoiceControl } from './assistant/VoiceControl';
+import { useModelingAssistant } from './assistant/useModelingAssistant';
+import { addPrimitiveAtWorkbench, applyModelingPlan, buildSceneContext } from './assistant/sceneActions';
+import type { ModelingPlan } from './assistant/types';
 import { MouseController } from './three/MouseController';
 import {
   createExportFile,
@@ -17,6 +23,7 @@ import {
   type PrimitiveType,
 } from './three/primitives';
 import { SceneController, type SceneControllerSnapshot } from './three/SceneController';
+import { SceneHistory, type SceneHistoryState } from './three/SceneHistory';
 import { SceneManager } from './three/SceneManager';
 
 const EMPTY_SCENE_SNAPSHOT: SceneControllerSnapshot = {
@@ -38,6 +45,13 @@ const EXPORT_LABELS: Record<ExportFormat, string> = {
   glb: 'GLB',
 };
 
+const EMPTY_HISTORY_STATE: SceneHistoryState = {
+  canUndo: false,
+  canRedo: false,
+  undoLabel: null,
+  redoLabel: null,
+};
+
 /**
  * AirCad — gesture-controlled 3D modeling.
  *
@@ -49,12 +63,19 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const managerRef = useRef<SceneManager | null>(null);
   const controllerRef = useRef<SceneController | null>(null);
+  const historyRef = useRef<SceneHistory | null>(null);
   const gestureSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
   const mouseSnapshotRef = useRef<SceneControllerSnapshot>(EMPTY_SCENE_SNAPSHOT);
   const exportInFlightRef = useRef(false);
   const deleteNoticeTimerRef = useRef<number | null>(null);
   const [cameraPreviewVisible, setCameraPreviewVisible] = useState(true);
+  const [gridVisible, setGridVisible] = useState(true);
+  const [axesVisible, setAxesVisible] = useState(true);
+  const [inspectorTab, setInspectorTab] = useState<'properties' | 'assistant'>('properties');
+  const [voiceControlVisible, setVoiceControlVisible] = useState(false);
   const [primitiveType, setPrimitiveType] = useState<PrimitiveType>('box');
+  const [objectCount, setObjectCount] = useState(0);
+  const [historyState, setHistoryState] = useState<SceneHistoryState>(EMPTY_HISTORY_STATE);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [exportState, setExportState] = useState<ExportState>({
     status: 'idle',
@@ -69,13 +90,60 @@ export default function App() {
   const { engineRef, status: gestureStatus, currentGesture, numHands } =
     useGestureEngine(videoEl);
 
+  const syncSceneUi = useCallback((action: SceneControllerSnapshot['action'] = 'none') => {
+    const manager = managerRef.current;
+    if (!manager) return;
+    const nextSnapshot: SceneControllerSnapshot = {
+      action,
+      selectedName: manager.objectStore.selected?.name ?? null,
+      isMoving: false,
+      shapeAxis: null,
+      input: null,
+      notice: null,
+    };
+    gestureSnapshotRef.current = nextSnapshot;
+    mouseSnapshotRef.current = nextSnapshot;
+    setSceneSnapshot(nextSnapshot);
+    setObjectCount(manager.objectStore.size);
+  }, []);
+
+  const getAssistantScene = useCallback(() => {
+    const manager = managerRef.current;
+    return manager ? buildSceneContext(manager) : null;
+  }, []);
+
+  const applyAssistantPlan = useCallback(async (plan: ModelingPlan) => {
+    const manager = managerRef.current;
+    const history = historyRef.current;
+    if (!manager || !history) throw new Error('The 3D scene is not ready yet.');
+    if (manager.mouseInteractionActive || sceneSnapshot.isMoving) {
+      throw new Error('Release the current object before applying an assistant request.');
+    }
+    const result = await history.perform(
+      `Assistant: ${plan.summary}`,
+      () => applyModelingPlan(manager, plan),
+    );
+    syncSceneUi();
+    return result;
+  }, [sceneSnapshot.isMoving, syncSceneUi]);
+
+  const assistant = useModelingAssistant({
+    getSceneContext: getAssistantScene,
+    applyPlan: applyAssistantPlan,
+  });
+
   useEffect(() => {
     if (!canvasRef.current) return;
     const manager = new SceneManager(canvasRef.current);
     const mouseController = new MouseController(manager);
+    const history = new SceneHistory(manager);
     managerRef.current = manager;
+    historyRef.current = history;
     manager.addStarterObject();
+    setObjectCount(manager.objectStore.size);
     manager.start();
+
+    const unsubscribeHistory = history.onChange(setHistoryState);
 
     const unsubscribeMouse = mouseController.on((snapshot) => {
       mouseSnapshotRef.current = snapshot;
@@ -87,13 +155,17 @@ export default function App() {
         }
       }
       setSceneSnapshot(snapshot);
+      setObjectCount(manager.objectStore.size);
     });
 
     return () => {
       unsubscribeMouse();
+      unsubscribeHistory();
       controllerRef.current?.dispose();
       controllerRef.current = null;
       mouseController.dispose();
+      history.dispose();
+      historyRef.current = null;
       manager.dispose();
       managerRef.current = null;
     };
@@ -122,6 +194,7 @@ export default function App() {
         }
       }
       setSceneSnapshot(manager.mouseInteractionActive ? mouseSnapshotRef.current : snapshot);
+      setObjectCount(manager.objectStore.size);
     });
 
     return () => {
@@ -141,29 +214,26 @@ export default function App() {
     }
   }, []);
 
-  const handleDeleteSelected = useCallback(() => {
+  const handleDeleteSelected = useCallback(async () => {
     const manager = managerRef.current;
+    const history = historyRef.current;
     if (
       !manager ||
+      !history ||
+      assistant.isBusy ||
       manager.mouseInteractionActive ||
       sceneSnapshot.isMoving ||
       sceneSnapshot.action === 'combine'
     ) return;
 
-    const deletedName = manager.objectStore.deleteSelected();
+    const selectedName = manager.objectStore.selected?.name;
+    if (!selectedName) return;
+    const deletedName = await history.perform(
+      `Delete ${selectedName}`,
+      () => manager.objectStore.deleteSelected(),
+    );
     if (!deletedName) return;
-
-    const nextSnapshot: SceneControllerSnapshot = {
-      action: 'delete',
-      selectedName: null,
-      isMoving: false,
-      shapeAxis: null,
-      input: null,
-      notice: null,
-    };
-    gestureSnapshotRef.current = nextSnapshot;
-    mouseSnapshotRef.current = nextSnapshot;
-    setSceneSnapshot(nextSnapshot);
+    syncSceneUi('delete');
     setDeleteNotice(`${deletedName} deleted`);
 
     if (deleteNoticeTimerRef.current !== null) {
@@ -173,7 +243,56 @@ export default function App() {
       setDeleteNotice(null);
       deleteNoticeTimerRef.current = null;
     }, 1_400);
-  }, [sceneSnapshot.action, sceneSnapshot.isMoving]);
+  }, [assistant.isBusy, sceneSnapshot.action, sceneSnapshot.isMoving, syncSceneUi]);
+
+  const handleAddPrimitive = useCallback(async (type: PrimitiveType) => {
+    const manager = managerRef.current;
+    const history = historyRef.current;
+    if (!manager || !history || assistant.isBusy || manager.mouseInteractionActive) return;
+    await history.perform(`Add ${PRIMITIVE_LABELS[type]}`, () => addPrimitiveAtWorkbench(manager, type));
+    setPrimitiveType(type);
+    syncSceneUi('create');
+  }, [assistant.isBusy, syncSceneUi]);
+
+  const handleUndo = useCallback(() => {
+    if (assistant.isBusy) return;
+    const label = historyRef.current?.undo();
+    if (label) syncSceneUi();
+  }, [assistant.isBusy, syncSceneUi]);
+
+  const handleRedo = useCallback(() => {
+    if (assistant.isBusy) return;
+    const label = historyRef.current?.redo();
+    if (label) syncSceneUi();
+  }, [assistant.isBusy, syncSceneUi]);
+
+  const handleFrameSelected = useCallback(() => {
+    managerRef.current?.frameSelected();
+  }, []);
+
+  const handleFrameAll = useCallback(() => {
+    managerRef.current?.frameAll();
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    managerRef.current?.resetView();
+  }, []);
+
+  const handleToggleGrid = useCallback(() => {
+    const manager = managerRef.current;
+    if (!manager) return;
+    const visible = !manager.gridVisible;
+    manager.setGridVisible(visible);
+    setGridVisible(visible);
+  }, []);
+
+  const handleToggleAxes = useCallback(() => {
+    const manager = managerRef.current;
+    if (!manager) return;
+    const visible = !manager.axesVisible;
+    manager.setAxesVisible(visible);
+    setAxesVisible(visible);
+  }, []);
 
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
@@ -185,15 +304,64 @@ export default function App() {
       ) return;
 
       event.preventDefault();
-      handleDeleteSelected();
+      void handleDeleteSelected();
     };
 
     window.addEventListener('keydown', handleDeleteKey);
     return () => window.removeEventListener('keydown', handleDeleteKey);
   }, [handleDeleteSelected]);
 
+  useEffect(() => {
+    const handleEditorShortcut = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.ctrlKey && event.shiftKey && event.code === 'Space') {
+        event.preventDefault();
+        setVoiceControlVisible(true);
+        assistant.toggleRecording();
+        return;
+      }
+      if (isTextEntryTarget(event.target)) return;
+
+      const key = event.key.toLowerCase();
+      if (event.ctrlKey && !event.shiftKey && key === 'z') {
+        event.preventDefault();
+        handleUndo();
+      } else if (event.ctrlKey && (key === 'y' || (event.shiftKey && key === 'z'))) {
+        event.preventDefault();
+        handleRedo();
+      } else if (event.code === 'NumpadDecimal') {
+        event.preventDefault();
+        handleFrameSelected();
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        handleFrameAll();
+      } else if (event.shiftKey && key === 'c') {
+        event.preventDefault();
+        handleResetView();
+      }
+    };
+
+    window.addEventListener('keydown', handleEditorShortcut);
+    return () => window.removeEventListener('keydown', handleEditorShortcut);
+  }, [
+    assistant.toggleRecording,
+    handleFrameAll,
+    handleFrameSelected,
+    handleRedo,
+    handleResetView,
+    handleUndo,
+  ]);
+
+  const handleToggleAssistant = useCallback(() => {
+    setInspectorTab((current) => current === 'assistant' ? 'properties' : 'assistant');
+  }, []);
+
+  const handleToggleVoice = useCallback(() => {
+    setVoiceControlVisible((visible) => assistant.isBusy ? true : !visible);
+  }, [assistant.isBusy]);
+
   const handleExport = async (format: ExportFormat) => {
-    if (exportInFlightRef.current) return;
+    if (exportInFlightRef.current || assistant.isBusy) return;
     const objects = managerRef.current?.objectStore.objects ?? [];
     const formatLabel = EXPORT_LABELS[format];
     if (objects.length === 0) {
@@ -230,11 +398,11 @@ export default function App() {
   );
   const cameraAvailable = camStatus === 'ready' || camStatus === 'requesting';
   const blocked = camStatus === 'denied' || camStatus === 'no-device' || camStatus === 'error';
-  const objectCount = managerRef.current?.objectStore.size ?? 0;
   const canDelete = Boolean(sceneSnapshot.selectedName) &&
+    !assistant.isBusy &&
     !sceneSnapshot.isMoving &&
     sceneSnapshot.action !== 'combine';
-  const exportDisabled = objectCount === 0 || exportState.status === 'working';
+  const exportDisabled = objectCount === 0 || exportState.status === 'working' || assistant.isBusy;
   const exportMessage = exportState.message ||
     (objectCount === 0
       ? 'Create an object before exporting.'
@@ -248,7 +416,37 @@ export default function App() {
         <div className="brand">
           <h1>AirCad</h1>
         </div>
+        <MenuBar
+          exportDisabled={exportDisabled}
+          sceneCommandsDisabled={assistant.isBusy || sceneSnapshot.isMoving}
+          canDelete={canDelete}
+          canUndo={historyState.canUndo && !assistant.isBusy}
+          canRedo={historyState.canRedo && !assistant.isBusy}
+          hasObjects={objectCount > 0}
+          hasSelection={Boolean(sceneSnapshot.selectedName)}
+          gridVisible={gridVisible}
+          axesVisible={axesVisible}
+          cameraVisible={cameraPreviewVisible}
+          assistantVisible={inspectorTab === 'assistant'}
+          voiceVisible={voiceControlVisible}
+          onExport={(format) => void handleExport(format)}
+          onDelete={() => void handleDeleteSelected()}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onAdd={(type) => void handleAddPrimitive(type)}
+          onFrameSelected={handleFrameSelected}
+          onFrameAll={handleFrameAll}
+          onResetView={handleResetView}
+          onToggleGrid={handleToggleGrid}
+          onToggleAxes={handleToggleAxes}
+          onToggleCamera={() => setCameraPreviewVisible((visible) => !visible)}
+          onToggleAssistant={handleToggleAssistant}
+          onToggleVoice={handleToggleVoice}
+        />
         <div className="topbar-actions">
+          <span className="topbar-object-count">
+            {objectCount} object{objectCount === 1 ? '' : 's'}
+          </span>
           <button
             type="button"
             className="camera-toggle"
@@ -278,20 +476,38 @@ export default function App() {
         ))}
       </aside>
 
-      <aside className="properties-panel" aria-label="Gesture and scene properties">
-        <div className="panel-heading">
-          <span>Properties</span>
+      <aside className="properties-panel" aria-label="Editor inspector">
+        <div className="inspector-tabs" role="tablist" aria-label="Inspector views">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={inspectorTab === 'properties'}
+            className={inspectorTab === 'properties' ? 'active' : ''}
+            onClick={() => setInspectorTab('properties')}
+          >
+            Properties
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={inspectorTab === 'assistant'}
+            className={inspectorTab === 'assistant' ? 'active' : ''}
+            onClick={() => setInspectorTab('assistant')}
+          >
+            Assistant
+          </button>
         </div>
 
-        <section className="property-section gesture-section">
+        {inspectorTab === 'properties' ? <div className="properties-scroll">
+          <section className="property-section gesture-section">
           <div className="section-heading">Hand controls</div>
           <div className="gesture-value">
             <strong className={gestureDisplay.idle ? 'idle' : ''}>{gestureDisplay.label}</strong>
             <span className="gesture-detail">{gestureDisplay.detail}</span>
           </div>
-        </section>
+          </section>
 
-        <section className="property-section">
+          <section className="property-section">
           <div className="section-heading">Create</div>
           <div className="primitive-value">
             <span className={`tool-glyph primitive-${primitiveType}`} aria-hidden="true" />
@@ -303,9 +519,9 @@ export default function App() {
           <p className="hint primitive-hint">
             Hold an open palm to create one at your hand. Relax your hand before creating another.
           </p>
-        </section>
+          </section>
 
-        <section className="property-section">
+          <section className="property-section">
           <div className="section-heading">Selection</div>
           <div
             className={`object-status ${deleteNotice ? 'command-delete' : sceneSnapshot.notice ? `command-${sceneSnapshot.action}` : ''}`}
@@ -330,9 +546,9 @@ export default function App() {
               <kbd aria-hidden="true">Del</kbd>
             </button>
           </div>
-        </section>
+          </section>
 
-        <section className="property-section export-section">
+          <section className="property-section export-section">
           <div className="section-heading">Export</div>
           <div className="export-actions">
             <button
@@ -372,12 +588,25 @@ export default function App() {
           >
             {exportMessage}
           </div>
-        </section>
+          </section>
+        </div> : (
+          <AssistantPanel
+            controller={assistant}
+            canUndo={historyState.canUndo}
+            onUndo={handleUndo}
+          />
+        )}
       </aside>
 
       {sceneSnapshot.isMoving && sceneSnapshot.input === 'gesture' && (
         <ControlCoach snapshot={sceneSnapshot} />
       )}
+
+      <VoiceControl
+        visible={voiceControlVisible}
+        controller={assistant}
+        onClose={() => setVoiceControlVisible(false)}
+      />
 
       <section className="bottom-panel" aria-label="Gesture reference">
         <div className="bottom-heading">Gestures</div>

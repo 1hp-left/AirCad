@@ -4,9 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node --env-file-if-exists=.env server/index.mjs",
+    "dev:vite": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "preview": "node --env-file-if-exists=.env server/index.mjs --production",
+    "start": "node --env-file-if-exists=.env server/index.mjs --production",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
